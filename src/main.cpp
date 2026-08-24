@@ -17,7 +17,7 @@ const char* SAVE_FILENAME = "save.json";
 void SaveGame() {
     std::ofstream fout(SAVE_FILENAME);
     if (fout.is_open()) {
-        fout << g_game.serialize_to_json();
+        fout << g_game.serialize_to_json(g_ui.senior_mode);
         fout.close();
     }
 }
@@ -28,7 +28,10 @@ void LoadGame() {
         std::string json_str((std::istreambuf_iterator<char>(fin)), std::istreambuf_iterator<char>());
         fin.close();
         if (!json_str.empty()) {
-            g_game.deserialize_from_json(json_str);
+            bool smode = true;
+            if (g_game.deserialize_from_json(json_str, smode)) {
+                g_ui.senior_mode = smode;
+            }
         }
     }
 }
@@ -38,6 +41,7 @@ void StartNewGameThread(HWND hwnd, Difficulty diff) {
     g_generating = true;
     g_ui.is_loading = true;
     g_ui.show_esc_menu = false;
+    g_ui.screen = AppScreen::InGame;
     InvalidateRect(hwnd, NULL, FALSE);
 
     std::thread([hwnd, diff]() {
@@ -52,8 +56,12 @@ void StartNewGameThread(HWND hwnd, Difficulty diff) {
         g_ui.show_number_popup = false;
 
         SaveGame();
-        PostMessage(hwnd, WM_USER + 1, 0, 0); // Notify UI thread done
+        PostMessage(hwnd, WM_USER + 1, 0, 0);
     }).detach();
+}
+
+static bool IsInRect(int x, int y, RECT r) {
+    return (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -62,7 +70,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         SetTimer(hwnd, TIMER_ID, 1000, NULL);
         LoadGame();
         if (g_game.elapsed_seconds == 0) {
-            // First run, find initial valid selection
             for (int r = 0; r < 21; ++r) {
                 for (int c = 0; c < 21; ++c) {
                     if (SamuraiSudoku::is_valid_cell(r, c)) {
@@ -78,7 +85,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_TIMER:
         if (wParam == TIMER_ID) {
-            if (!g_ui.is_loading && !g_ui.show_esc_menu && !g_game.is_completed()) {
+            if (g_ui.screen == AppScreen::InGame && !g_ui.is_loading && !g_ui.show_esc_menu && !g_game.is_completed()) {
                 g_game.elapsed_seconds++;
                 InvalidateRect(hwnd, NULL, FALSE);
             }
@@ -100,7 +107,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_ERASEBKGND:
-        return 1; // Handled double buffer in WM_PAINT
+        return 1;
 
     case WM_LBUTTONDOWN: {
         if (g_ui.is_loading) break;
@@ -108,49 +115,173 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int x = LOWORD(lParam);
         int y = HIWORD(lParam);
 
-        if (g_ui.show_number_popup) {
-            int action = UIRenderer::GetPopupNumberFromPos(x, y, g_ui);
-            if (action >= 1 && action <= 9) {
-                if (g_ui.note_mode) {
-                    g_game.toggle_note(g_ui.popup_r, g_ui.popup_c, action);
-                } else {
-                    g_game.set_cell_value(g_ui.popup_r, g_ui.popup_c, action);
-                }
+        // ------------------------------------
+        // Handle Clicks in MAIN MENU
+        // ------------------------------------
+        if (g_ui.screen == AppScreen::MainMenu) {
+            int width = GetSystemMetrics(SM_CXSCREEN);
+            int height = GetSystemMetrics(SM_CYSCREEN);
+            bool senior = g_ui.senior_mode;
+            int btn_w = senior ? 360 : 300;
+            int btn_h = senior ? 60 : 50;
+            int start_y = height / 3;
+            int gap = senior ? 25 : 20;
+
+            RECT r1 = {width / 2 - btn_w / 2, start_y, width / 2 + btn_w / 2, start_y + btn_h};
+            RECT r2 = {width / 2 - btn_w / 2, start_y + (btn_h + gap), width / 2 + btn_w / 2, start_y + (btn_h + gap) + btn_h};
+            RECT r3 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 2, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 2 + btn_h};
+            RECT r4 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 3, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 3 + btn_h};
+            RECT r5 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 4, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 4 + btn_h};
+
+            if (IsInRect(x, y, r1)) {
+                g_ui.screen = AppScreen::InGame;
+            } else if (IsInRect(x, y, r2)) {
+                g_ui.screen = AppScreen::DifficultySelect;
+            } else if (IsInRect(x, y, r3)) {
+                g_ui.senior_mode = !g_ui.senior_mode;
                 SaveGame();
-                g_ui.show_number_popup = false;
-            } else if (action == 10) { // Clear
-                g_game.clear_cell(g_ui.popup_r, g_ui.popup_c);
+            } else if (IsInRect(x, y, r4)) {
+                g_ui.screen = AppScreen::ControlsGuide;
+            } else if (IsInRect(x, y, r5)) {
                 SaveGame();
-                g_ui.show_number_popup = false;
-            } else {
-                g_ui.show_number_popup = false;
+                PostQuitMessage(0);
             }
             InvalidateRect(hwnd, NULL, FALSE);
             break;
         }
 
-        int click_r, click_c;
-        UIRenderer::GetCellFromPos(x, y, g_ui, click_r, click_c);
-        if (click_r != -1 && click_c != -1) {
-            if (g_ui.selected_r == click_r && g_ui.selected_c == click_c) {
-                // Clicking already selected cell toggles pop-up
-                if (!g_game.board[click_r][click_c].is_given) {
-                    g_ui.show_number_popup = true;
-                    g_ui.popup_r = click_r;
-                    g_ui.popup_c = click_c;
-                }
-            } else {
-                g_ui.selected_r = click_r;
-                g_ui.selected_c = click_c;
-                g_ui.show_number_popup = false;
-            }
+        // ------------------------------------
+        // Handle Clicks in DIFFICULTY SELECT
+        // ------------------------------------
+        if (g_ui.screen == AppScreen::DifficultySelect) {
+            int width = GetSystemMetrics(SM_CXSCREEN);
+            int height = GetSystemMetrics(SM_CYSCREEN);
+            bool senior = g_ui.senior_mode;
+            int btn_w = senior ? 360 : 300;
+            int btn_h = senior ? 55 : 48;
+            int start_y = height / 3;
+            int gap = senior ? 20 : 16;
+
+            RECT r1 = {width / 2 - btn_w / 2, start_y, width / 2 + btn_w / 2, start_y + btn_h};
+            RECT r2 = {width / 2 - btn_w / 2, start_y + (btn_h + gap), width / 2 + btn_w / 2, start_y + (btn_h + gap) + btn_h};
+            RECT r3 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 2, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 2 + btn_h};
+            RECT r4 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 3, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 3 + btn_h};
+            RECT r5 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 4, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 4 + btn_h};
+            RECT r6 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 5, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 5 + btn_h};
+
+            if (IsInRect(x, y, r1)) StartNewGameThread(hwnd, Difficulty::Easy);
+            else if (IsInRect(x, y, r2)) StartNewGameThread(hwnd, Difficulty::Medium);
+            else if (IsInRect(x, y, r3)) StartNewGameThread(hwnd, Difficulty::Hard);
+            else if (IsInRect(x, y, r4)) StartNewGameThread(hwnd, Difficulty::Expert);
+            else if (IsInRect(x, y, r5)) StartNewGameThread(hwnd, Difficulty::Master);
+            else if (IsInRect(x, y, r6)) g_ui.screen = AppScreen::MainMenu;
+
             InvalidateRect(hwnd, NULL, FALSE);
+            break;
+        }
+
+        // ------------------------------------
+        // Handle Clicks in CONTROLS GUIDE
+        // ------------------------------------
+        if (g_ui.screen == AppScreen::ControlsGuide) {
+            int width = GetSystemMetrics(SM_CXSCREEN);
+            int height = GetSystemMetrics(SM_CYSCREEN);
+            bool senior = g_ui.senior_mode;
+            int y_guide = height / 4;
+            int step = senior ? 40 : 32;
+            RECT r_back = {width / 2 - 150, y_guide + 9 * step, width / 2 + 150, y_guide + 9 * step + 50};
+
+            if (IsInRect(x, y, r_back)) {
+                g_ui.screen = AppScreen::MainMenu;
+                InvalidateRect(hwnd, NULL, FALSE);
+            }
+            break;
+        }
+
+        // ------------------------------------
+        // Handle Clicks IN-GAME HUD & BOARD
+        // ------------------------------------
+        if (g_ui.screen == AppScreen::InGame) {
+            if (IsInRect(x, y, g_ui.btn_undo)) {
+                g_game.undo();
+                SaveGame();
+                InvalidateRect(hwnd, NULL, FALSE);
+                break;
+            }
+            if (IsInRect(x, y, g_ui.btn_erase)) {
+                if (g_ui.selected_r >= 0 && g_ui.selected_c >= 0) {
+                    g_game.clear_cell(g_ui.selected_r, g_ui.selected_c);
+                    SaveGame();
+                    InvalidateRect(hwnd, NULL, FALSE);
+                }
+                break;
+            }
+            if (IsInRect(x, y, g_ui.btn_notes)) {
+                g_ui.note_mode = !g_ui.note_mode;
+                InvalidateRect(hwnd, NULL, FALSE);
+                break;
+            }
+            if (IsInRect(x, y, g_ui.btn_reset)) {
+                g_game.reset_to_initial();
+                SaveGame();
+                InvalidateRect(hwnd, NULL, FALSE);
+                break;
+            }
+            if (IsInRect(x, y, g_ui.btn_theme)) {
+                g_ui.senior_mode = !g_ui.senior_mode;
+                SaveGame();
+                InvalidateRect(hwnd, NULL, FALSE);
+                break;
+            }
+            if (IsInRect(x, y, g_ui.btn_menu)) {
+                g_ui.show_esc_menu = true;
+                InvalidateRect(hwnd, NULL, FALSE);
+                break;
+            }
+
+            if (g_ui.show_number_popup) {
+                int action = UIRenderer::GetPopupNumberFromPos(x, y, g_ui);
+                if (action >= 1 && action <= 9) {
+                    if (g_ui.note_mode) {
+                        g_game.toggle_note(g_ui.popup_r, g_ui.popup_c, action);
+                    } else {
+                        g_game.set_cell_value(g_ui.popup_r, g_ui.popup_c, action);
+                    }
+                    SaveGame();
+                    g_ui.show_number_popup = false;
+                } else if (action == 10) {
+                    g_game.clear_cell(g_ui.popup_r, g_ui.popup_c);
+                    SaveGame();
+                    g_ui.show_number_popup = false;
+                } else {
+                    g_ui.show_number_popup = false;
+                }
+                InvalidateRect(hwnd, NULL, FALSE);
+                break;
+            }
+
+            int click_r, click_c;
+            UIRenderer::GetCellFromPos(x, y, g_ui, click_r, click_c);
+            if (click_r != -1 && click_c != -1) {
+                if (g_ui.selected_r == click_r && g_ui.selected_c == click_c) {
+                    if (!g_game.board[click_r][click_c].is_given) {
+                        g_ui.show_number_popup = true;
+                        g_ui.popup_r = click_r;
+                        g_ui.popup_c = click_c;
+                    }
+                } else {
+                    g_ui.selected_r = click_r;
+                    g_ui.selected_c = click_c;
+                    g_ui.show_number_popup = false;
+                }
+                InvalidateRect(hwnd, NULL, FALSE);
+            }
         }
         break;
     }
 
     case WM_RBUTTONDOWN: {
-        if (g_ui.is_loading) break;
+        if (g_ui.is_loading || g_ui.screen != AppScreen::InGame) break;
         int x = LOWORD(lParam);
         int y = HIWORD(lParam);
         int click_r, click_c;
@@ -169,101 +300,132 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_KEYDOWN: {
         if (g_ui.is_loading) break;
 
-        // Handle ESC menu shortcuts
-        if (g_ui.show_esc_menu) {
+        // In-game ESC Menu overlay keys
+        if (g_ui.screen == AppScreen::InGame && g_ui.show_esc_menu) {
             if (wParam == VK_ESCAPE || wParam == '1') {
                 g_ui.show_esc_menu = false;
             } else if (wParam == '2') {
-                StartNewGameThread(hwnd, Difficulty::Easy);
-            } else if (wParam == '3') {
-                StartNewGameThread(hwnd, Difficulty::Medium);
-            } else if (wParam == '4') {
-                StartNewGameThread(hwnd, Difficulty::Hard);
-            } else if (wParam == 'Q') {
+                g_game.reset_to_initial();
+                g_ui.show_esc_menu = false;
                 SaveGame();
-                PostQuitMessage(0);
+            } else if (wParam == '3') {
+                g_ui.show_esc_menu = false;
+                g_ui.screen = AppScreen::DifficultySelect;
+            } else if (wParam == '4') {
+                g_ui.senior_mode = !g_ui.senior_mode;
+                SaveGame();
+            } else if (wParam == '5') {
+                g_ui.show_esc_menu = false;
+                g_ui.screen = AppScreen::MainMenu;
             }
             InvalidateRect(hwnd, NULL, FALSE);
             break;
         }
 
-        if (wParam == VK_ESCAPE) {
-            if (g_ui.show_number_popup) {
-                g_ui.show_number_popup = false;
-            } else {
-                g_ui.show_esc_menu = true;
-            }
+        // Main Menu shortcuts
+        if (g_ui.screen == AppScreen::MainMenu) {
+            if (wParam == '1') g_ui.screen = AppScreen::InGame;
+            else if (wParam == '2') g_ui.screen = AppScreen::DifficultySelect;
+            else if (wParam == '3') { g_ui.senior_mode = !g_ui.senior_mode; SaveGame(); }
+            else if (wParam == '4') g_ui.screen = AppScreen::ControlsGuide;
+            else if (wParam == '5' || wParam == VK_ESCAPE) { SaveGame(); PostQuitMessage(0); }
             InvalidateRect(hwnd, NULL, FALSE);
             break;
         }
 
-        // Toggle note mode with 'N'
-        if (wParam == 'N') {
-            g_ui.note_mode = !g_ui.note_mode;
+        // Difficulty selection shortcuts
+        if (g_ui.screen == AppScreen::DifficultySelect) {
+            if (wParam == '1') StartNewGameThread(hwnd, Difficulty::Easy);
+            else if (wParam == '2') StartNewGameThread(hwnd, Difficulty::Medium);
+            else if (wParam == '3') StartNewGameThread(hwnd, Difficulty::Hard);
+            else if (wParam == '4') StartNewGameThread(hwnd, Difficulty::Expert);
+            else if (wParam == '5') StartNewGameThread(hwnd, Difficulty::Master);
+            else if (wParam == VK_ESCAPE) g_ui.screen = AppScreen::MainMenu;
             InvalidateRect(hwnd, NULL, FALSE);
             break;
         }
 
-        // Undo Ctrl+Z
-        if ((GetKeyState(VK_CONTROL) & 0x8000) && wParam == 'Z') {
-            g_game.undo();
-            SaveGame();
+        if (g_ui.screen == AppScreen::ControlsGuide) {
+            if (wParam == VK_ESCAPE) g_ui.screen = AppScreen::MainMenu;
             InvalidateRect(hwnd, NULL, FALSE);
             break;
         }
 
-        // Arrow Key Navigation
-        int dr = 0, dc = 0;
-        if (wParam == VK_LEFT) dc = -1;
-        else if (wParam == VK_RIGHT) dc = 1;
-        else if (wParam == VK_UP) dr = -1;
-        else if (wParam == VK_DOWN) dr = 1;
-
-        if (dr != 0 || dc != 0) {
-            int curr_r = g_ui.selected_r < 0 ? 0 : g_ui.selected_r;
-            int curr_c = g_ui.selected_c < 0 ? 0 : g_ui.selected_c;
-
-            int next_r = curr_r + dr;
-            int next_c = curr_c + dc;
-
-            while (next_r >= 0 && next_r < 21 && next_c >= 0 && next_c < 21) {
-                if (SamuraiSudoku::is_valid_cell(next_r, next_c)) {
-                    g_ui.selected_r = next_r;
-                    g_ui.selected_c = next_c;
+        // In-game Key Events
+        if (g_ui.screen == AppScreen::InGame) {
+            if (wParam == VK_ESCAPE) {
+                if (g_ui.show_number_popup) {
                     g_ui.show_number_popup = false;
-                    InvalidateRect(hwnd, NULL, FALSE);
-                    break;
+                } else {
+                    g_ui.show_esc_menu = true;
                 }
-                next_r += dr;
-                next_c += dc;
+                InvalidateRect(hwnd, NULL, FALSE);
+                break;
             }
-            break;
-        }
 
-        // Delete / Backspace
-        if (wParam == VK_DELETE || wParam == VK_BACK) {
-            if (g_ui.selected_r >= 0 && g_ui.selected_c >= 0) {
-                g_game.clear_cell(g_ui.selected_r, g_ui.selected_c);
+            if (wParam == 'N') {
+                g_ui.note_mode = !g_ui.note_mode;
+                InvalidateRect(hwnd, NULL, FALSE);
+                break;
+            }
+
+            if ((GetKeyState(VK_CONTROL) & 0x8000) && wParam == 'Z') {
+                g_game.undo();
+                SaveGame();
+                InvalidateRect(hwnd, NULL, FALSE);
+                break;
+            }
+
+            int dr = 0, dc = 0;
+            if (wParam == VK_LEFT) dc = -1;
+            else if (wParam == VK_RIGHT) dc = 1;
+            else if (wParam == VK_UP) dr = -1;
+            else if (wParam == VK_DOWN) dr = 1;
+
+            if (dr != 0 || dc != 0) {
+                int curr_r = g_ui.selected_r < 0 ? 0 : g_ui.selected_r;
+                int curr_c = g_ui.selected_c < 0 ? 0 : g_ui.selected_c;
+
+                int next_r = curr_r + dr;
+                int next_c = curr_c + dc;
+
+                while (next_r >= 0 && next_r < 21 && next_c >= 0 && next_c < 21) {
+                    if (SamuraiSudoku::is_valid_cell(next_r, next_c)) {
+                        g_ui.selected_r = next_r;
+                        g_ui.selected_c = next_c;
+                        g_ui.show_number_popup = false;
+                        InvalidateRect(hwnd, NULL, FALSE);
+                        break;
+                    }
+                    next_r += dr;
+                    next_c += dc;
+                }
+                break;
+            }
+
+            if (wParam == VK_DELETE || wParam == VK_BACK) {
+                if (g_ui.selected_r >= 0 && g_ui.selected_c >= 0) {
+                    g_game.clear_cell(g_ui.selected_r, g_ui.selected_c);
+                    SaveGame();
+                    InvalidateRect(hwnd, NULL, FALSE);
+                }
+                break;
+            }
+
+            int num = 0;
+            if (wParam >= '1' && wParam <= '9') num = wParam - '0';
+            else if (wParam >= VK_NUMPAD1 && wParam <= VK_NUMPAD9) num = wParam - VK_NUMPAD1 + 1;
+
+            if (num >= 1 && num <= 9 && g_ui.selected_r >= 0 && g_ui.selected_c >= 0) {
+                bool is_shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                if (g_ui.note_mode || is_shift) {
+                    g_game.toggle_note(g_ui.selected_r, g_ui.selected_c, num);
+                } else {
+                    g_game.set_cell_value(g_ui.selected_r, g_ui.selected_c, num);
+                }
                 SaveGame();
                 InvalidateRect(hwnd, NULL, FALSE);
             }
-            break;
-        }
-
-        // Numbers 1-9 (Main Keyboard & Numpad)
-        int num = 0;
-        if (wParam >= '1' && wParam <= '9') num = wParam - '0';
-        else if (wParam >= VK_NUMPAD1 && wParam <= VK_NUMPAD9) num = wParam - VK_NUMPAD1 + 1;
-
-        if (num >= 1 && num <= 9 && g_ui.selected_r >= 0 && g_ui.selected_c >= 0) {
-            bool is_shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-            if (g_ui.note_mode || is_shift) {
-                g_game.toggle_note(g_ui.selected_r, g_ui.selected_c, num);
-            } else {
-                g_game.set_cell_value(g_ui.selected_r, g_ui.selected_c, num);
-            }
-            SaveGame();
-            InvalidateRect(hwnd, NULL, FALSE);
         }
         break;
     }
@@ -297,7 +459,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     RegisterClassExA(&wc);
 
-    // Fullscreen borderless window setup
     int screen_w = GetSystemMetrics(SM_CXSCREEN);
     int screen_h = GetSystemMetrics(SM_CYSCREEN);
 

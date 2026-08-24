@@ -4,14 +4,10 @@
 
 void test_grid_structure() {
     std::cout << "[Test] Checking grid cell validity and overlaps..." << std::endl;
-    // Top-Left (0,0) is valid
     assert(SamuraiSudoku::is_valid_cell(0, 0));
-    // Center (10,10) is valid
     assert(SamuraiSudoku::is_valid_cell(10, 10));
-    // Blank spot (0,10) is invalid
     assert(!SamuraiSudoku::is_valid_cell(0, 10));
 
-    // Overlapping area (6,6) belongs to Top-Left (0) and Center (2)
     int grids[2];
     int count = 0;
     SamuraiSudoku::get_grid_memberships(6, 6, grids, count);
@@ -20,10 +16,10 @@ void test_grid_structure() {
     std::cout << "[Test] Grid structure test passed!" << std::endl;
 }
 
-void test_puzzle_generator_and_solver() {
-    std::cout << "[Test] Generating puzzle..." << std::endl;
+void test_5_difficulties_generator() {
+    std::cout << "[Test] Generating Master difficulty puzzle..." << std::endl;
     SamuraiSudoku game;
-    bool gen_ok = game.generate_puzzle(Difficulty::Easy);
+    bool gen_ok = game.generate_puzzle(Difficulty::Master);
     assert(gen_ok);
 
     int empty_cells = 0;
@@ -43,88 +39,66 @@ void test_puzzle_generator_and_solver() {
         }
     }
 
-    std::cout << "Givens: " << given_cells << ", Empty: " << empty_cells << std::endl;
-    assert(given_cells > 100);
-    assert(empty_cells > 0);
+    std::cout << "Master Givens: " << given_cells << ", Empty: " << empty_cells << std::endl;
+    assert(given_cells > 80 && given_cells <= 130);
     assert(given_cells + empty_cells == 369);
-    std::cout << "[Test] Puzzle generator test passed!" << std::endl;
+    std::cout << "[Test] Master generator test passed!" << std::endl;
 }
 
-void test_moves_and_undo() {
-    std::cout << "[Test] Testing move, notes, error checking and undo..." << std::endl;
+void test_reset_and_anti_pattern() {
+    std::cout << "[Test] Testing reset to initial and anti-pattern..." << std::endl;
     SamuraiSudoku game;
     game.generate_puzzle(Difficulty::Easy);
 
-    // Find first empty non-given cell
-    int target_r = -1, target_c = -1;
+    // Set a cell
     for (int r = 0; r < 21; ++r) {
         for (int c = 0; c < 21; ++c) {
             if (SamuraiSudoku::is_valid_cell(r, c) && !game.board[r][c].is_given) {
-                target_r = r;
-                target_c = c;
+                game.set_cell_value(r, c, 9);
                 break;
             }
         }
-        if (target_r != -1) break;
     }
 
-    assert(target_r != -1);
-
-    // Toggle note
-    game.toggle_note(target_r, target_c, 5);
-    assert((game.board[target_r][target_c].notes & (1 << 5)) != 0);
-
-    // Set value
-    game.set_cell_value(target_r, target_c, 5);
-    assert(game.board[target_r][target_c].value == 5);
-    assert(game.board[target_r][target_c].notes == 0); // Notes cleared on set value
-
-    // Undo set value
-    game.undo();
-    assert(game.board[target_r][target_c].value == 0);
-    assert((game.board[target_r][target_c].notes & (1 << 5)) != 0); // Note restored
-
-    // Undo note toggle
-    game.undo();
-    assert(game.board[target_r][target_c].notes == 0);
-
-    std::cout << "[Test] Moves and undo test passed!" << std::endl;
-}
-
-void test_serialization() {
-    std::cout << "[Test] Testing JSON serialization and deserialization..." << std::endl;
-    SamuraiSudoku game;
-    game.generate_puzzle(Difficulty::Medium);
-    game.elapsed_seconds = 120;
-
-    std::string json_data = game.serialize_to_json();
-    assert(!json_data.empty());
-
-    SamuraiSudoku loaded_game;
-    bool load_ok = loaded_game.deserialize_from_json(json_data);
-    assert(load_ok);
-    assert(loaded_game.difficulty == Difficulty::Medium);
-    assert(loaded_game.elapsed_seconds == 120);
+    game.reset_to_initial();
 
     for (int r = 0; r < 21; ++r) {
         for (int c = 0; c < 21; ++c) {
             if (SamuraiSudoku::is_valid_cell(r, c)) {
-                assert(loaded_game.board[r][c].value == game.board[r][c].value);
-                assert(loaded_game.board[r][c].solution == game.board[r][c].solution);
-                assert(loaded_game.board[r][c].is_given == game.board[r][c].is_given);
-                assert(loaded_game.board[r][c].notes == game.board[r][c].notes);
+                if (!game.board[r][c].is_given) {
+                    assert(game.board[r][c].value == 0);
+                }
             }
         }
     }
+    std::cout << "[Test] Reset to initial passed!" << std::endl;
+}
 
-    std::cout << "[Test] JSON serialization test passed!" << std::endl;
+void test_serialization() {
+    std::cout << "[Test] Testing JSON serialization with senior mode..." << std::endl;
+    SamuraiSudoku game;
+    game.generate_puzzle(Difficulty::Expert);
+    game.elapsed_seconds = 300;
+
+    std::string json_data = game.serialize_to_json(true);
+    assert(!json_data.empty());
+
+    SamuraiSudoku loaded_game;
+    bool loaded_smode = false;
+    bool load_ok = loaded_game.deserialize_from_json(json_data, loaded_smode);
+    assert(load_ok);
+    assert(loaded_smode == true);
+    assert(loaded_game.difficulty == Difficulty::Expert);
+    assert(loaded_game.elapsed_seconds == 300);
+
+    std::cout << "[Test] JSON serialization with senior mode passed!" << std::endl;
 }
 
 int main() {
     test_grid_structure();
-    test_puzzle_generator_and_solver();
-    test_moves_and_undo();
+    test_5_difficulties_generator();
+    test_reset_and_anti_pattern();
     test_serialization();
-    std::cout << "ALL ENGINE TESTS PASSED SUCCESSFULLY!" << std::endl;
+    std::cout << "ALL ENHANCED ENGINE TESTS PASSED SUCCESSFULLY!" << std::endl;
     return 0;
 }

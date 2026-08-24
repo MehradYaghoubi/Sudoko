@@ -4,6 +4,7 @@
 #include <chrono>
 #include <sstream>
 #include <iostream>
+#include <numeric>
 
 SamuraiSudoku::SamuraiSudoku() {
     reset();
@@ -43,6 +44,22 @@ void SamuraiSudoku::reset() {
     error_count = 0;
 }
 
+void SamuraiSudoku::reset_to_initial() {
+    for (int r = 0; r < 21; ++r) {
+        for (int c = 0; c < 21; ++c) {
+            if (is_valid_cell(r, c)) {
+                if (!board[r][c].is_given) {
+                    board[r][c].value = 0;
+                    board[r][c].notes = 0;
+                    board[r][c].is_error = false;
+                }
+            }
+        }
+    }
+    history.clear();
+    recheck_errors();
+}
+
 bool SamuraiSudoku::is_valid_move(int r, int c, int val, const int grid[21][21]) const {
     if (val == 0) return true;
     int grids[2];
@@ -56,19 +73,16 @@ bool SamuraiSudoku::is_valid_move(int r, int c, int val, const int grid[21][21])
         int base_r = GRID_OFFSETS[g].r;
         int base_c = GRID_OFFSETS[g].c;
 
-        // Check sub-grid row
         for (int i = 0; i < 9; ++i) {
             int check_c = base_c + i;
             if (check_c != c && grid[r][check_c] == val) return false;
         }
 
-        // Check sub-grid col
         for (int i = 0; i < 9; ++i) {
             int check_r = base_r + i;
             if (check_r != r && grid[check_r][c] == val) return false;
         }
 
-        // Check 3x3 box in sub-grid
         int box_start_r = base_r + (gr / 3) * 3;
         int box_start_c = base_c + (gc / 3) * 3;
         for (int br = 0; br < 3; ++br) {
@@ -100,7 +114,7 @@ bool SamuraiSudoku::solve(int grid[21][21], int& solution_count, int max_solutio
                     }
                 }
                 if (valid_nums.empty()) {
-                    return false; // Dead end
+                    return false;
                 }
                 if ((int)valid_nums.size() < min_candidates) {
                     min_candidates = (int)valid_nums.size();
@@ -119,8 +133,7 @@ bool SamuraiSudoku::solve(int grid[21][21], int& solution_count, int max_solutio
         return solution_count >= max_solutions;
     }
 
-    // Shuffle best_nums if generating to get randomized valid solution
-    static thread_local std::mt19937 rng(1337);
+    static thread_local std::mt19937 rng(std::random_device{}());
     if (max_solutions == 1) {
         std::shuffle(best_nums.begin(), best_nums.end(), rng);
     }
@@ -136,21 +149,57 @@ bool SamuraiSudoku::solve(int grid[21][21], int& solution_count, int max_solutio
     return false;
 }
 
+void SamuraiSudoku::apply_anti_pattern_transformations() {
+    std::random_device rd;
+    std::mt19937 rng(rd());
+
+    // 1. Random digit relabeling (1-9 permutation)
+    std::vector<int> p = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    std::shuffle(p.begin(), p.end(), rng);
+    int map_digit[10] = {0};
+    for (int i = 0; i < 9; ++i) map_digit[i + 1] = p[i];
+
+    for (int r = 0; r < 21; ++r) {
+        for (int c = 0; c < 21; ++c) {
+            if (is_valid_cell(r, c)) {
+                if (board[r][c].value != 0) board[r][c].value = map_digit[board[r][c].value];
+                if (board[r][c].solution != 0) board[r][c].solution = map_digit[board[r][c].solution];
+            }
+        }
+    }
+
+    // 2. Symmetric rotation (0, 90, 180, 270 degrees)
+    int rot = (rng() % 4);
+    if (rot > 0) {
+        Cell new_board[21][21];
+        for (int r = 0; r < 21; ++r) {
+            for (int c = 0; c < 21; ++c) {
+                int nr = r, nc = c;
+                if (rot == 1) { nr = c; nc = 20 - r; }
+                else if (rot == 2) { nr = 20 - r; nc = 20 - c; }
+                else if (rot == 3) { nr = 20 - c; nc = r; }
+
+                if (is_valid_cell(nr, nc)) {
+                    new_board[nr][nc] = board[r][c];
+                }
+            }
+        }
+        std::copy(&new_board[0][0], &new_board[0][0] + 21 * 21, &board[0][0]);
+    }
+}
+
 bool SamuraiSudoku::generate_puzzle(Difficulty diff) {
     reset();
     difficulty = diff;
 
     int temp_grid[21][21] = {0};
 
-    // Helper RNG
     std::random_device rd;
     std::mt19937 g(rd());
 
-    // Solve starting from empty grid with randomized choice order
     int solution_count = 0;
     solve(temp_grid, solution_count, 1);
 
-    // Save full solution to board
     for (int r = 0; r < 21; ++r) {
         for (int c = 0; c < 21; ++c) {
             if (is_valid_cell(r, c)) {
@@ -161,7 +210,6 @@ bool SamuraiSudoku::generate_puzzle(Difficulty diff) {
         }
     }
 
-    // Gather all valid cell positions
     std::vector<Position> cells;
     for (int r = 0; r < 21; ++r) {
         for (int c = 0; c < 21; ++c) {
@@ -172,14 +220,14 @@ bool SamuraiSudoku::generate_puzzle(Difficulty diff) {
     }
     std::shuffle(cells.begin(), cells.end(), g);
 
-    // Target givens count:
-    // Easy: ~220 given
-    // Medium: ~180 given
-    // Hard: ~150 given
-    int target_givens = 200;
-    if (diff == Difficulty::Easy) target_givens = 220;
-    else if (diff == Difficulty::Medium) target_givens = 180;
-    else if (diff == Difficulty::Hard) target_givens = 150;
+    int target_givens = 180;
+    switch (diff) {
+        case Difficulty::Easy:   target_givens = 220; break;
+        case Difficulty::Medium: target_givens = 180; break;
+        case Difficulty::Hard:   target_givens = 150; break;
+        case Difficulty::Expert: target_givens = 130; break;
+        case Difficulty::Master: target_givens = 115; break;
+    }
 
     int current_givens = (int)cells.size();
 
@@ -189,7 +237,6 @@ bool SamuraiSudoku::generate_puzzle(Difficulty diff) {
         int backup = temp_grid[pos.r][pos.c];
         temp_grid[pos.r][pos.c] = 0;
 
-        // Verify if puzzle still has unique solution
         int check_grid[21][21];
         std::copy(&temp_grid[0][0], &temp_grid[0][0] + 21 * 21, &check_grid[0][0]);
 
@@ -201,9 +248,11 @@ bool SamuraiSudoku::generate_puzzle(Difficulty diff) {
             board[pos.r][pos.c].is_given = false;
             current_givens--;
         } else {
-            temp_grid[pos.r][pos.c] = backup; // Restore
+            temp_grid[pos.r][pos.c] = backup;
         }
     }
+
+    apply_anti_pattern_transformations();
 
     return true;
 }
@@ -223,7 +272,7 @@ bool SamuraiSudoku::set_cell_value(int r, int c, int val) {
 
     board[r][c].value = val;
     if (val != 0) {
-        board[r][c].notes = 0; // Clear notes when number is entered
+        board[r][c].notes = 0;
     }
 
     history.push_back(hist);
@@ -320,12 +369,13 @@ bool SamuraiSudoku::is_completed() const {
     return true;
 }
 
-std::string SamuraiSudoku::serialize_to_json() const {
+std::string SamuraiSudoku::serialize_to_json(bool senior_mode) const {
     std::ostringstream ss;
     ss << "{\n";
     ss << "  \"difficulty\": " << static_cast<int>(difficulty) << ",\n";
     ss << "  \"elapsed_seconds\": " << elapsed_seconds << ",\n";
     ss << "  \"error_count\": " << error_count << ",\n";
+    ss << "  \"senior_mode\": " << (senior_mode ? "true" : "false") << ",\n";
     ss << "  \"cells\": [\n";
 
     bool first = true;
@@ -346,8 +396,9 @@ std::string SamuraiSudoku::serialize_to_json() const {
     return ss.str();
 }
 
-bool SamuraiSudoku::deserialize_from_json(const std::string& json_str) {
+bool SamuraiSudoku::deserialize_from_json(const std::string& json_str, bool& out_senior_mode) {
     reset();
+    out_senior_mode = false;
 
     auto find_val = [&](const std::string& key) -> std::string {
         size_t pos = json_str.find("\"" + key + "\"");
@@ -370,6 +421,9 @@ bool SamuraiSudoku::deserialize_from_json(const std::string& json_str) {
 
     std::string err_str = find_val("error_count");
     if (!err_str.empty()) error_count = std::stoi(err_str);
+
+    std::string smode_str = find_val("senior_mode");
+    if (!smode_str.empty()) out_senior_mode = (smode_str == "true");
 
     size_t cells_pos = json_str.find("\"cells\"");
     if (cells_pos == std::string::npos) return false;

@@ -6,9 +6,11 @@
 #include <string>
 
 enum class Difficulty {
-    Easy,
-    Medium,
-    Hard
+    Easy = 0,
+    Medium = 1,
+    Hard = 2,
+    Expert = 3,
+    Master = 4
 };
 
 struct Position {
@@ -60,12 +62,14 @@ public:
     static void get_grid_memberships(int r, int c, int grids[2], int& count);
 
     void reset();
+    void reset_to_initial(); // Resets user played moves, restoring given board state
     bool is_valid_move(int r, int c, int val, const int grid[21][21]) const;
     bool is_completed() const;
 
     // Solver and generator
     bool solve(int grid[21][21], int& solution_count, int max_solutions = 2) const;
     bool generate_puzzle(Difficulty diff);
+    void apply_anti_pattern_transformations();
 
     // Move actions
     bool set_cell_value(int r, int c, int val);
@@ -77,8 +81,8 @@ public:
     void recheck_errors();
 
     // JSON Serialization
-    std::string serialize_to_json() const;
-    bool deserialize_from_json(const std::string& json_str);
+    std::string serialize_to_json(bool senior_mode = false) const;
+    bool deserialize_from_json(const std::string& json_str, bool& out_senior_mode);
 };
 
 #endif // SUDOKU_ENGINE_H

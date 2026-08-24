@@ -4,12 +4,20 @@
 #include <windows.h>
 #include "sudoku_engine.h"
 
+enum class AppScreen {
+    MainMenu,
+    DifficultySelect,
+    InGame,
+    ControlsGuide
+};
+
 struct UIState {
+    AppScreen screen = AppScreen::MainMenu;
     int selected_r = -1;
     int selected_c = -1;
     bool note_mode = false;
+    bool senior_mode = true; // High-contrast & enlarged fonts by default
     bool show_esc_menu = false;
-    bool show_new_game_modal = false;
     bool is_loading = false;
     bool show_number_popup = false;
     int popup_r = -1;
@@ -19,6 +27,14 @@ struct UIState {
     int cell_size = 30;
     int grid_origin_x = 0;
     int grid_origin_y = 0;
+
+    // Action button rectangles in game HUD
+    RECT btn_undo = {0, 0, 0, 0};
+    RECT btn_erase = {0, 0, 0, 0};
+    RECT btn_notes = {0, 0, 0, 0};
+    RECT btn_reset = {0, 0, 0, 0};
+    RECT btn_menu = {0, 0, 0, 0};
+    RECT btn_theme = {0, 0, 0, 0};
 };
 
 class UIRenderer {
