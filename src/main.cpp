@@ -115,12 +115,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int x = LOWORD(lParam);
         int y = HIWORD(lParam);
 
+        RECT clientRect;
+        GetClientRect(hwnd, &clientRect);
+        int width = clientRect.right - clientRect.left;
+        int height = clientRect.bottom - clientRect.top;
+
         // ------------------------------------
         // Handle Clicks in MAIN MENU
         // ------------------------------------
         if (g_ui.screen == AppScreen::MainMenu) {
-            int width = GetSystemMetrics(SM_CXSCREEN);
-            int height = GetSystemMetrics(SM_CYSCREEN);
             bool senior = g_ui.senior_mode;
             int btn_w = senior ? 360 : 300;
             int btn_h = senior ? 60 : 50;
@@ -154,8 +157,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         // Handle Clicks in DIFFICULTY SELECT
         // ------------------------------------
         if (g_ui.screen == AppScreen::DifficultySelect) {
-            int width = GetSystemMetrics(SM_CXSCREEN);
-            int height = GetSystemMetrics(SM_CYSCREEN);
             bool senior = g_ui.senior_mode;
             int btn_w = senior ? 360 : 300;
             int btn_h = senior ? 55 : 48;
@@ -184,8 +185,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         // Handle Clicks in CONTROLS GUIDE
         // ------------------------------------
         if (g_ui.screen == AppScreen::ControlsGuide) {
-            int width = GetSystemMetrics(SM_CXSCREEN);
-            int height = GetSystemMetrics(SM_CYSCREEN);
             bool senior = g_ui.senior_mode;
             int y_guide = height / 4;
             int step = senior ? 40 : 32;
@@ -300,7 +299,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_KEYDOWN: {
         if (g_ui.is_loading) break;
 
-        // In-game ESC Menu overlay keys
         if (g_ui.screen == AppScreen::InGame && g_ui.show_esc_menu) {
             if (wParam == VK_ESCAPE || wParam == '1') {
                 g_ui.show_esc_menu = false;
@@ -322,7 +320,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
         }
 
-        // Main Menu shortcuts
         if (g_ui.screen == AppScreen::MainMenu) {
             if (wParam == '1') g_ui.screen = AppScreen::InGame;
             else if (wParam == '2') g_ui.screen = AppScreen::DifficultySelect;
@@ -333,12 +330,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
         }
 
-        // Difficulty selection shortcuts
         if (g_ui.screen == AppScreen::DifficultySelect) {
             if (wParam == '1') StartNewGameThread(hwnd, Difficulty::Easy);
             else if (wParam == '2') StartNewGameThread(hwnd, Difficulty::Medium);
             else if (wParam == '3') StartNewGameThread(hwnd, Difficulty::Hard);
-            else if (wParam == '4') StartNewGameThread(hwnd, Difficulty::Expert);
+            else if (wParam == '4') StartNewGameThread(wParam == '4' ? hwnd : hwnd, Difficulty::Expert);
             else if (wParam == '5') StartNewGameThread(hwnd, Difficulty::Master);
             else if (wParam == VK_ESCAPE) g_ui.screen = AppScreen::MainMenu;
             InvalidateRect(hwnd, NULL, FALSE);
@@ -351,7 +347,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
         }
 
-        // In-game Key Events
         if (g_ui.screen == AppScreen::InGame) {
             if (wParam == VK_ESCAPE) {
                 if (g_ui.show_number_popup) {
@@ -459,15 +454,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     RegisterClassExA(&wc);
 
+    // Standard Windowed Mode (WS_OVERLAPPEDWINDOW) with initial size 1280x800, centered
     int screen_w = GetSystemMetrics(SM_CXSCREEN);
     int screen_h = GetSystemMetrics(SM_CYSCREEN);
+    int win_w = 1280;
+    int win_h = 820;
+    int win_x = (screen_w - win_w) / 2;
+    int win_y = (screen_h - win_h) / 2;
+    if (win_x < 0) win_x = 0;
+    if (win_y < 0) win_y = 0;
 
     HWND hwnd = CreateWindowExA(
         0,
         CLASS_NAME,
         "Samurai Sudoku",
-        WS_POPUP | WS_VISIBLE,
-        0, 0, screen_w, screen_h,
+        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+        win_x, win_y, win_w, win_h,
         NULL, NULL, hInstance, NULL
     );
 

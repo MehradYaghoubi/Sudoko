@@ -3,7 +3,6 @@
 #include <cstdio>
 
 // Theme Color Definitions
-// 1. Modern Theme
 const COLORREF MODERN_BG = RGB(245, 247, 250);
 const COLORREF MODERN_HEADER_BG = RGB(40, 44, 52);
 const COLORREF MODERN_HEADER_TEXT = RGB(240, 240, 240);
@@ -19,20 +18,20 @@ const COLORREF MODERN_TEXT_USER = RGB(25, 118, 210);
 const COLORREF MODERN_TEXT_ERROR = RGB(211, 47, 47);
 const COLORREF MODERN_TEXT_NOTE = RGB(100, 116, 139);
 
-// 2. Senior / High-Contrast Theme (High readability, deep blues, sharp contrast)
+// Senior / High-Contrast Theme
 const COLORREF SENIOR_BG = RGB(255, 255, 255);
-const COLORREF SENIOR_HEADER_BG = RGB(15, 23, 42); // Deep navy
+const COLORREF SENIOR_HEADER_BG = RGB(15, 23, 42);
 const COLORREF SENIOR_HEADER_TEXT = RGB(255, 255, 255);
 const COLORREF SENIOR_CELL_BG = RGB(255, 255, 255);
 const COLORREF SENIOR_GIVEN_BG = RGB(226, 232, 240);
-const COLORREF SENIOR_OVERLAP_BG = RGB(254, 240, 138); // Clear high-contrast yellow tint
-const COLORREF SENIOR_SELECTED_BG = RGB(147, 197, 253); // Bright sky blue
+const COLORREF SENIOR_OVERLAP_BG = RGB(254, 240, 138);
+const COLORREF SENIOR_SELECTED_BG = RGB(147, 197, 253);
 const COLORREF SENIOR_SAME_NUM_BG = RGB(191, 219, 254);
 const COLORREF SENIOR_ERROR_BG = RGB(254, 202, 202);
 
-const COLORREF SENIOR_TEXT_GIVEN = RGB(0, 0, 0);       // Pure black bold
-const COLORREF SENIOR_TEXT_USER = RGB(2, 132, 199);    // Crisp deep blue
-const COLORREF SENIOR_TEXT_ERROR = RGB(185, 28, 28);   // Sharp red
+const COLORREF SENIOR_TEXT_GIVEN = RGB(0, 0, 0);
+const COLORREF SENIOR_TEXT_USER = RGB(2, 132, 199);
+const COLORREF SENIOR_TEXT_ERROR = RGB(185, 28, 28);
 const COLORREF SENIOR_TEXT_NOTE = RGB(51, 65, 85);
 
 void UIRenderer::GetCellFromPos(int mouse_x, int mouse_y, const UIState& ui, int& out_r, int& out_c) {
@@ -229,11 +228,10 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         DrawButton(memDC, r_back, "< Back to Main Menu", RGB(224, 231, 255), RGB(15, 23, 42), buttonFont);
     }
     // -------------------------------------------------------------
-    // SCREEN 4: IN-GAME HUD & BOARD
+    // SCREEN 4: IN-GAME HUD & BOARD (Sidebar Buttons on the Right)
     // -------------------------------------------------------------
     else if (ui.screen == AppScreen::InGame) {
-        // Top Header Bar (Height 70px)
-        int header_height = senior ? 70 : 60;
+        int header_height = senior ? 65 : 55;
         RECT headerRect = {0, 0, width, header_height};
         HBRUSH headerBrush = CreateSolidBrush(head_bg);
         FillRect(memDC, &headerRect, headerBrush);
@@ -243,63 +241,67 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         SetTextColor(memDC, head_txt);
 
         SelectObject(memDC, titleFont);
-        TextOutA(memDC, 20, senior ? 15 : 12, "SAMURAI SUDOKU", 14);
+        TextOutA(memDC, 20, senior ? 12 : 10, "SAMURAI SUDOKU", 14);
 
         SelectObject(memDC, infoFont);
         const char* diff_names[] = {"Easy", "Medium", "Hard", "Expert", "Master"};
         char diff_str[32];
         snprintf(diff_str, sizeof(diff_str), "Diff: %s", diff_names[static_cast<int>(game.difficulty)]);
-        TextOutA(memDC, 300, senior ? 20 : 18, diff_str, (int)strlen(diff_str));
+        TextOutA(memDC, 300, senior ? 16 : 14, diff_str, (int)strlen(diff_str));
 
         int mins = game.elapsed_seconds / 60;
         int secs = game.elapsed_seconds % 60;
         char time_str[32];
         snprintf(time_str, sizeof(time_str), "Time: %02d:%02d", mins, secs);
-        TextOutA(memDC, 480, senior ? 20 : 18, time_str, (int)strlen(time_str));
+        TextOutA(memDC, 480, senior ? 16 : 14, time_str, (int)strlen(time_str));
 
         char err_str[32];
         snprintf(err_str, sizeof(err_str), "Errors: %d", game.error_count);
-        TextOutA(memDC, 650, senior ? 20 : 18, err_str, (int)strlen(err_str));
+        TextOutA(memDC, 650, senior ? 16 : 14, err_str, (int)strlen(err_str));
 
-        // Bottom/Side HUD Large Touch Action Buttons (Ideal for Senior/Ease of access)
-        int btn_w = senior ? 130 : 110;
-        int btn_h = senior ? 50 : 42;
-        int hud_y = height - btn_h - 15;
-        int total_hud_w = 6 * btn_w + 5 * 15;
-        int start_x = (width - total_hud_w) / 2;
+        // Layout Dimensions: Board on Left/Center, Action Sidebar on the Right with generous spacing
+        int side_panel_width = senior ? 220 : 180;
+        int padding = 30;
+
+        int available_height = height - header_height - 20;
+        int available_width = width - side_panel_width - padding * 3;
+        int grid_pixel_size = (available_height < available_width ? available_height : available_width);
+        int cell_sz = grid_pixel_size / 21;
+        if (cell_sz < 14) cell_sz = 14;
+        grid_pixel_size = cell_sz * 21;
+
+        int origin_x = padding;
+        int origin_y = header_height + (available_height - grid_pixel_size) / 2;
 
         UIState* mutable_ui = const_cast<UIState*>(&ui);
-        mutable_ui->btn_undo  = {start_x, hud_y, start_x + btn_w, hud_y + btn_h};
-        mutable_ui->btn_erase = {start_x + (btn_w + 15), hud_y, start_x + (btn_w + 15) + btn_w, hud_y + btn_h};
-        mutable_ui->btn_notes = {start_x + (btn_w + 15) * 2, hud_y, start_x + (btn_w + 15) * 2 + btn_w, hud_y + btn_h};
-        mutable_ui->btn_reset = {start_x + (btn_w + 15) * 3, hud_y, start_x + (btn_w + 15) * 3 + btn_w, hud_y + btn_h};
-        mutable_ui->btn_theme = {start_x + (btn_w + 15) * 4, hud_y, start_x + (btn_w + 15) * 4 + btn_w, hud_y + btn_h};
-        mutable_ui->btn_menu  = {start_x + (btn_w + 15) * 5, hud_y, start_x + (btn_w + 15) * 5 + btn_w, hud_y + btn_h};
+        mutable_ui->cell_size = cell_sz;
+        mutable_ui->grid_origin_x = origin_x;
+        mutable_ui->grid_origin_y = origin_y;
+
+        // Position Sidebar Action Buttons on the Right
+        int sidebar_x = origin_x + grid_pixel_size + padding + 10;
+        int btn_w = senior ? 190 : 160;
+        int btn_h = senior ? 55 : 46;
+        int btn_gap = senior ? 25 : 18; // Generous vertical spacing
+        int start_btn_y = origin_y + (grid_pixel_size - (6 * btn_h + 5 * btn_gap)) / 2;
+        if (start_btn_y < header_height + 10) start_btn_y = header_height + 10;
+
+        mutable_ui->btn_undo  = {sidebar_x, start_btn_y, sidebar_x + btn_w, start_btn_y + btn_h};
+        mutable_ui->btn_erase = {sidebar_x, start_btn_y + (btn_h + btn_gap), sidebar_x + btn_w, start_btn_y + (btn_h + btn_gap) + btn_h};
+        mutable_ui->btn_notes = {sidebar_x, start_btn_y + (btn_h + btn_gap) * 2, sidebar_x + btn_w, start_btn_y + (btn_h + btn_gap) * 2 + btn_h};
+        mutable_ui->btn_reset = {sidebar_x, start_btn_y + (btn_h + btn_gap) * 3, sidebar_x + btn_w, start_btn_y + (btn_h + btn_gap) * 3 + btn_h};
+        mutable_ui->btn_theme = {sidebar_x, start_btn_y + (btn_h + btn_gap) * 4, sidebar_x + btn_w, start_btn_y + (btn_h + btn_gap) * 4 + btn_h};
+        mutable_ui->btn_menu  = {sidebar_x, start_btn_y + (btn_h + btn_gap) * 5, sidebar_x + btn_w, start_btn_y + (btn_h + btn_gap) * 5 + btn_h};
 
         COLORREF action_bg = senior ? RGB(224, 231, 255) : RGB(235, 240, 248);
         COLORREF active_notes_bg = RGB(254, 240, 138);
 
         DrawButton(memDC, ui.btn_undo, "Undo", action_bg, RGB(15, 23, 42), buttonFont);
-        DrawButton(memDC, ui.btn_erase, "Erase", action_bg, RGB(15, 23, 42), buttonFont);
+        DrawButton(memDC, ui.btn_erase, "Erase Cell", action_bg, RGB(15, 23, 42), buttonFont);
         DrawButton(memDC, ui.btn_notes, ui.note_mode ? "Notes [ON]" : "Notes [OFF]", ui.note_mode ? active_notes_bg : action_bg, RGB(15, 23, 42), buttonFont);
-        DrawButton(memDC, ui.btn_reset, "Reset", action_bg, RGB(15, 23, 42), buttonFont);
+        DrawButton(memDC, ui.btn_reset, "Reset Game", action_bg, RGB(15, 23, 42), buttonFont);
         DrawButton(memDC, ui.btn_theme, senior ? "Senior UI" : "Modern UI", action_bg, RGB(15, 23, 42), buttonFont);
-        DrawButton(memDC, ui.btn_menu, "Menu (ESC)", action_bg, RGB(15, 23, 42), buttonFont);
-
-        // Grid Dimensions calculation
-        int available_height = height - header_height - btn_h - 40;
-        int available_width = width - 40;
-        int grid_pixel_size = (available_height < available_width ? available_height : available_width);
-        int cell_sz = grid_pixel_size / 21;
-        if (cell_sz < 15) cell_sz = 15;
-        grid_pixel_size = cell_sz * 21;
-
-        int origin_x = (width - grid_pixel_size) / 2;
-        int origin_y = header_height + (available_height - grid_pixel_size) / 2;
-
-        mutable_ui->cell_size = cell_sz;
-        mutable_ui->grid_origin_x = origin_x;
-        mutable_ui->grid_origin_y = origin_y;
+        DrawButton(memDC, ui.btn_menu, "Main Menu (ESC)", action_bg, RGB(15, 23, 42), buttonFont);
 
         int selected_val = 0;
         if (ui.selected_r >= 0 && ui.selected_c >= 0) {
@@ -311,7 +313,6 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         HFONT noteFont = CreateFontA(cell_sz * 28 / 100, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                                      OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
 
-        // Cell background & text colors depending on theme
         COLORREF c_cell_bg = senior ? SENIOR_CELL_BG : MODERN_CELL_BG;
         COLORREF c_given_bg = senior ? SENIOR_GIVEN_BG : MODERN_GIVEN_BG;
         COLORREF c_overlap_bg = senior ? SENIOR_OVERLAP_BG : MODERN_OVERLAP_BG;
@@ -323,7 +324,7 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         COLORREF c_txt_user = senior ? SENIOR_TEXT_USER : MODERN_TEXT_USER;
         COLORREF c_txt_error = senior ? SENIOR_TEXT_ERROR : MODERN_TEXT_ERROR;
 
-        // Render Cells
+        // Render Grid Cells
         for (int r = 0; r < 21; ++r) {
             for (int c = 0; c < 21; ++c) {
                 if (!SamuraiSudoku::is_valid_cell(r, c)) continue;
