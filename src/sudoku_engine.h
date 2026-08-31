@@ -13,6 +13,11 @@ enum class Difficulty {
     Master = 4
 };
 
+enum class Language {
+    English = 0,
+    Persian = 1
+};
+
 struct Position {
     int r;
     int c;
@@ -52,6 +57,7 @@ class SamuraiSudoku {
 public:
     Cell board[21][21];
     Difficulty difficulty = Difficulty::Medium;
+    Language language = Language::Persian;
     int elapsed_seconds = 0;
     int error_count = 0;
     std::vector<MoveHistory> history;
@@ -62,7 +68,7 @@ public:
     static void get_grid_memberships(int r, int c, int grids[2], int& count);
 
     void reset();
-    void reset_to_initial(); // Resets user played moves, restoring given board state
+    void reset_to_initial();
     bool is_valid_move(int r, int c, int val, const int grid[21][21]) const;
     bool is_completed() const;
 

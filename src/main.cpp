@@ -46,6 +46,7 @@ void StartNewGameThread(HWND hwnd, Difficulty diff) {
 
     std::thread([hwnd, diff]() {
         SamuraiSudoku new_game;
+        new_game.language = g_game.language;
         new_game.generate_puzzle(diff);
 
         g_game = new_game;
@@ -126,15 +127,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (g_ui.screen == AppScreen::MainMenu) {
             bool senior = g_ui.senior_mode;
             int btn_w = senior ? 360 : 300;
-            int btn_h = senior ? 60 : 50;
-            int start_y = height / 3;
-            int gap = senior ? 25 : 20;
+            int btn_h = senior ? 55 : 46;
+            int start_y = height / 4 + 20;
+            int gap = senior ? 18 : 14;
 
             RECT r1 = {width / 2 - btn_w / 2, start_y, width / 2 + btn_w / 2, start_y + btn_h};
             RECT r2 = {width / 2 - btn_w / 2, start_y + (btn_h + gap), width / 2 + btn_w / 2, start_y + (btn_h + gap) + btn_h};
             RECT r3 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 2, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 2 + btn_h};
             RECT r4 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 3, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 3 + btn_h};
             RECT r5 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 4, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 4 + btn_h};
+            RECT r6 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 5, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 5 + btn_h};
 
             if (IsInRect(x, y, r1)) {
                 g_ui.screen = AppScreen::InGame;
@@ -144,8 +146,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_ui.senior_mode = !g_ui.senior_mode;
                 SaveGame();
             } else if (IsInRect(x, y, r4)) {
-                g_ui.screen = AppScreen::ControlsGuide;
+                g_game.language = (g_game.language == Language::English) ? Language::Persian : Language::English;
+                SaveGame();
             } else if (IsInRect(x, y, r5)) {
+                g_ui.screen = AppScreen::ControlsGuide;
+            } else if (IsInRect(x, y, r6)) {
                 SaveGame();
                 PostQuitMessage(0);
             }
@@ -159,9 +164,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (g_ui.screen == AppScreen::DifficultySelect) {
             bool senior = g_ui.senior_mode;
             int btn_w = senior ? 360 : 300;
-            int btn_h = senior ? 55 : 48;
-            int start_y = height / 3;
-            int gap = senior ? 20 : 16;
+            int btn_h = senior ? 52 : 44;
+            int start_y = height / 3 - 20;
+            int gap = senior ? 16 : 12;
 
             RECT r1 = {width / 2 - btn_w / 2, start_y, width / 2 + btn_w / 2, start_y + btn_h};
             RECT r2 = {width / 2 - btn_w / 2, start_y + (btn_h + gap), width / 2 + btn_w / 2, start_y + (btn_h + gap) + btn_h};
@@ -187,8 +192,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (g_ui.screen == AppScreen::ControlsGuide) {
             bool senior = g_ui.senior_mode;
             int y_guide = height / 4;
-            int step = senior ? 40 : 32;
-            RECT r_back = {width / 2 - 150, y_guide + 9 * step, width / 2 + 150, y_guide + 9 * step + 50};
+            int step = senior ? 36 : 28;
+            RECT r_back = {width / 2 - 150, y_guide + 8 * step + 20, width / 2 + 150, y_guide + 8 * step + 65};
 
             if (IsInRect(x, y, r_back)) {
                 g_ui.screen = AppScreen::MainMenu;
@@ -201,6 +206,36 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         // Handle Clicks IN-GAME HUD & BOARD
         // ------------------------------------
         if (g_ui.screen == AppScreen::InGame) {
+            // STRICT TOP Z-ORDER CHECK: Pop-up Keypad Interception
+            if (g_ui.show_number_popup) {
+                if (IsInRect(x, y, g_ui.popup_rect)) {
+                    int action = UIRenderer::GetPopupNumberFromPos(x, y, g_ui);
+                    if (action >= 1 && action <= 9) {
+                        if (g_ui.note_mode) {
+                            g_game.toggle_note(g_ui.popup_r, g_ui.popup_c, action);
+                        } else {
+                            g_game.set_cell_value(g_ui.popup_r, g_ui.popup_c, action);
+                        }
+                        SaveGame();
+                        g_ui.show_number_popup = false;
+                    } else if (action == 10) { // Erase
+                        g_game.clear_cell(g_ui.popup_r, g_ui.popup_c);
+                        SaveGame();
+                        g_ui.show_number_popup = false;
+                    } else { // Close or Header
+                        g_ui.show_number_popup = false;
+                    }
+                    InvalidateRect(hwnd, NULL, FALSE);
+                    break; // Strictly stop processing click!
+                } else {
+                    // Clicked outside pop-up closes keypad
+                    g_ui.show_number_popup = false;
+                    InvalidateRect(hwnd, NULL, FALSE);
+                    // Do not break here so click can select new cell or action if desired
+                }
+            }
+
+            // Sidebar Action Buttons
             if (IsInRect(x, y, g_ui.btn_undo)) {
                 g_game.undo();
                 SaveGame();
@@ -232,33 +267,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 InvalidateRect(hwnd, NULL, FALSE);
                 break;
             }
+            if (IsInRect(x, y, g_ui.btn_lang)) {
+                g_game.language = (g_game.language == Language::English) ? Language::Persian : Language::English;
+                SaveGame();
+                InvalidateRect(hwnd, NULL, FALSE);
+                break;
+            }
             if (IsInRect(x, y, g_ui.btn_menu)) {
                 g_ui.show_esc_menu = true;
                 InvalidateRect(hwnd, NULL, FALSE);
                 break;
             }
 
-            if (g_ui.show_number_popup) {
-                int action = UIRenderer::GetPopupNumberFromPos(x, y, g_ui);
-                if (action >= 1 && action <= 9) {
-                    if (g_ui.note_mode) {
-                        g_game.toggle_note(g_ui.popup_r, g_ui.popup_c, action);
-                    } else {
-                        g_game.set_cell_value(g_ui.popup_r, g_ui.popup_c, action);
-                    }
-                    SaveGame();
-                    g_ui.show_number_popup = false;
-                } else if (action == 10) {
-                    g_game.clear_cell(g_ui.popup_r, g_ui.popup_c);
-                    SaveGame();
-                    g_ui.show_number_popup = false;
-                } else {
-                    g_ui.show_number_popup = false;
-                }
-                InvalidateRect(hwnd, NULL, FALSE);
-                break;
-            }
-
+            // Cell Clicks
             int click_r, click_c;
             UIRenderer::GetCellFromPos(x, y, g_ui, click_r, click_c);
             if (click_r != -1 && click_c != -1) {
@@ -324,8 +345,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (wParam == '1') g_ui.screen = AppScreen::InGame;
             else if (wParam == '2') g_ui.screen = AppScreen::DifficultySelect;
             else if (wParam == '3') { g_ui.senior_mode = !g_ui.senior_mode; SaveGame(); }
-            else if (wParam == '4') g_ui.screen = AppScreen::ControlsGuide;
-            else if (wParam == '5' || wParam == VK_ESCAPE) { SaveGame(); PostQuitMessage(0); }
+            else if (wParam == '4') { g_game.language = (g_game.language == Language::English) ? Language::Persian : Language::English; SaveGame(); }
+            else if (wParam == '5') g_ui.screen = AppScreen::ControlsGuide;
+            else if (wParam == '6' || wParam == VK_ESCAPE) { SaveGame(); PostQuitMessage(0); }
             InvalidateRect(hwnd, NULL, FALSE);
             break;
         }
@@ -334,7 +356,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (wParam == '1') StartNewGameThread(hwnd, Difficulty::Easy);
             else if (wParam == '2') StartNewGameThread(hwnd, Difficulty::Medium);
             else if (wParam == '3') StartNewGameThread(hwnd, Difficulty::Hard);
-            else if (wParam == '4') StartNewGameThread(wParam == '4' ? hwnd : hwnd, Difficulty::Expert);
+            else if (wParam == '4') StartNewGameThread(hwnd, Difficulty::Expert);
             else if (wParam == '5') StartNewGameThread(hwnd, Difficulty::Master);
             else if (wParam == VK_ESCAPE) g_ui.screen = AppScreen::MainMenu;
             InvalidateRect(hwnd, NULL, FALSE);
@@ -454,7 +476,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     RegisterClassExA(&wc);
 
-    // Standard Windowed Mode (WS_OVERLAPPEDWINDOW) with initial size 1280x800, centered
     int screen_w = GetSystemMetrics(SM_CXSCREEN);
     int screen_h = GetSystemMetrics(SM_CYSCREEN);
     int win_w = 1280;

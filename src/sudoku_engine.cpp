@@ -153,7 +153,6 @@ void SamuraiSudoku::apply_anti_pattern_transformations() {
     std::random_device rd;
     std::mt19937 rng(rd());
 
-    // 1. Random digit relabeling (1-9 permutation)
     std::vector<int> p = {1, 2, 3, 4, 5, 6, 7, 8, 9};
     std::shuffle(p.begin(), p.end(), rng);
     int map_digit[10] = {0};
@@ -168,7 +167,6 @@ void SamuraiSudoku::apply_anti_pattern_transformations() {
         }
     }
 
-    // 2. Symmetric rotation (0, 90, 180, 270 degrees)
     int rot = (rng() % 4);
     if (rot > 0) {
         Cell new_board[21][21];
@@ -373,6 +371,7 @@ std::string SamuraiSudoku::serialize_to_json(bool senior_mode) const {
     std::ostringstream ss;
     ss << "{\n";
     ss << "  \"difficulty\": " << static_cast<int>(difficulty) << ",\n";
+    ss << "  \"language\": " << static_cast<int>(language) << ",\n";
     ss << "  \"elapsed_seconds\": " << elapsed_seconds << ",\n";
     ss << "  \"error_count\": " << error_count << ",\n";
     ss << "  \"senior_mode\": " << (senior_mode ? "true" : "false") << ",\n";
@@ -415,6 +414,9 @@ bool SamuraiSudoku::deserialize_from_json(const std::string& json_str, bool& out
 
     std::string diff_str = find_val("difficulty");
     if (!diff_str.empty()) difficulty = static_cast<Difficulty>(std::stoi(diff_str));
+
+    std::string lang_str = find_val("language");
+    if (!lang_str.empty()) language = static_cast<Language>(std::stoi(lang_str));
 
     std::string time_str = find_val("elapsed_seconds");
     if (!time_str.empty()) elapsed_seconds = std::stoi(time_str);

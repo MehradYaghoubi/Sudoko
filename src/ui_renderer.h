@@ -33,8 +33,9 @@ struct UIState {
     RECT btn_erase = {0, 0, 0, 0};
     RECT btn_notes = {0, 0, 0, 0};
     RECT btn_reset = {0, 0, 0, 0};
-    RECT btn_menu = {0, 0, 0, 0};
     RECT btn_theme = {0, 0, 0, 0};
+    RECT btn_lang = {0, 0, 0, 0};
+    RECT btn_menu = {0, 0, 0, 0};
 };
 
 class UIRenderer {
@@ -42,6 +43,7 @@ public:
     static void Render(HDC hdc, int width, int height, const SamuraiSudoku& game, const UIState& ui);
     static void GetCellFromPos(int mouse_x, int mouse_y, const UIState& ui, int& out_r, int& out_c);
     static int GetPopupNumberFromPos(int mouse_x, int mouse_y, const UIState& ui);
+    static std::wstring Utf8ToWide(const std::string& utf8_str);
 };
 
 #endif // UI_RENDERER_H
