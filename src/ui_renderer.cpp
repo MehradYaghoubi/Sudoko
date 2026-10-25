@@ -4,18 +4,18 @@
 #include <vector>
 
 // Theme Color Definitions
-const COLORREF MODERN_BG = RGB(245, 247, 250);
-const COLORREF MODERN_HEADER_BG = RGB(40, 44, 52);
-const COLORREF MODERN_HEADER_TEXT = RGB(240, 240, 240);
+const COLORREF MODERN_BG = RGB(246, 248, 252);
+const COLORREF MODERN_HEADER_BG = RGB(20, 31, 51);
+const COLORREF MODERN_HEADER_TEXT = RGB(248, 250, 252);
 const COLORREF MODERN_CELL_BG = RGB(255, 255, 255);
-const COLORREF MODERN_GIVEN_BG = RGB(240, 243, 246);
-const COLORREF MODERN_OVERLAP_BG = RGB(232, 240, 254);
-const COLORREF MODERN_SELECTED_BG = RGB(187, 222, 251);
-const COLORREF MODERN_SAME_NUM_BG = RGB(227, 242, 253);
+const COLORREF MODERN_GIVEN_BG = RGB(236, 241, 247);
+const COLORREF MODERN_OVERLAP_BG = RGB(226, 239, 250);
+const COLORREF MODERN_SELECTED_BG = RGB(153, 218, 203);
+const COLORREF MODERN_SAME_NUM_BG = RGB(224, 242, 241);
 const COLORREF MODERN_ERROR_BG = RGB(255, 205, 210);
 
 const COLORREF MODERN_TEXT_GIVEN = RGB(20, 20, 20);
-const COLORREF MODERN_TEXT_USER = RGB(25, 118, 210);
+const COLORREF MODERN_TEXT_USER = RGB(15, 118, 110);
 const COLORREF MODERN_TEXT_ERROR = RGB(211, 47, 47);
 const COLORREF MODERN_TEXT_NOTE = RGB(100, 116, 139);
 
@@ -102,12 +102,41 @@ static void DrawTextW_Centered(HDC hdc, RECT rect, const std::wstring& wtext, CO
 
 static void DrawButtonW(HDC hdc, RECT rect, const std::wstring& text, COLORREF bg, COLORREF textColor, HFONT font) {
     HBRUSH brush = CreateSolidBrush(bg);
-    FillRect(hdc, &rect, brush);
+    HPEN pen = CreatePen(PS_SOLID, 1, RGB(203, 213, 225));
+    HGDIOBJ oldBrush = SelectObject(hdc, brush);
+    HGDIOBJ oldPen = SelectObject(hdc, pen);
+    RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, 12, 12);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
     DeleteObject(brush);
+    DeleteObject(pen);
 
-    FrameRect(hdc, &rect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+    RECT textRect = {rect.left + 8, rect.top + 2, rect.right - 8, rect.bottom - 2};
+    DrawTextW_Centered(hdc, textRect, text, textColor, font);
+}
 
-    DrawTextW_Centered(hdc, rect, text, textColor, font);
+static void DrawBrandMark(HDC hdc, int center_x, int top) {
+    const int board = 18;
+    const int x[] = {center_x - 20, center_x + 2, center_x - 9, center_x - 20, center_x + 2};
+    const int y[] = {top, top, top + 11, top + 22, top + 22};
+    const COLORREF colors[] = {RGB(37, 99, 235), RGB(13, 148, 136), RGB(30, 41, 59), RGB(99, 102, 241), RGB(14, 116, 144)};
+    HPEN gridPen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
+    HGDIOBJ oldPen = SelectObject(hdc, gridPen);
+    for (int i = 0; i < 5; ++i) {
+        HBRUSH brush = CreateSolidBrush(colors[i]);
+        HGDIOBJ oldBrush = SelectObject(hdc, brush);
+        RoundRect(hdc, x[i], y[i], x[i] + board, y[i] + board, 3, 3);
+        SelectObject(hdc, oldBrush);
+        DeleteObject(brush);
+        for (int line = 1; line < 3; ++line) {
+            MoveToEx(hdc, x[i] + line * board / 3, y[i] + 2, NULL);
+            LineTo(hdc, x[i] + line * board / 3, y[i] + board - 2);
+            MoveToEx(hdc, x[i] + 2, y[i] + line * board / 3, NULL);
+            LineTo(hdc, x[i] + board - 2, y[i] + line * board / 3);
+        }
+    }
+    SelectObject(hdc, oldPen);
+    DeleteObject(gridPen);
 }
 
 void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& game, const UIState& ui) {
@@ -129,7 +158,7 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
 
     const char* font_family = is_fa ? "Tahoma" : "Segoe UI";
 
-    HFONT titleFont = CreateFontA(senior ? 30 : 24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+    HFONT titleFont = CreateFontA(senior ? 32 : 30, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, font_family);
     HFONT buttonFont = CreateFontA(senior ? 20 : 16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                                    OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, font_family);
@@ -144,9 +173,14 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         SetTextColor(memDC, senior ? RGB(15, 23, 42) : RGB(30, 40, 60));
         SetBkMode(memDC, TRANSPARENT);
 
+        DrawBrandMark(memDC, width / 2, 22);
         std::wstring main_title = is_fa ? L"سودوکو سامورایی" : L"SAMURAI SUDOKU";
         RECT titleRect = {0, height / 10, width, height / 5};
-        DrawTextW_Centered(memDC, titleRect, main_title, senior ? RGB(15, 23, 42) : RGB(30, 40, 60), titleFont);
+        DrawTextW_Centered(memDC, titleRect, main_title, senior ? RGB(15, 23, 42) : RGB(20, 31, 51), titleFont);
+        RECT subtitleRect = {width / 10, height / 5, width * 9 / 10, height / 5 + 30};
+        DrawTextW_Centered(memDC, subtitleRect,
+            is_fa ? L"پنج جدول به‌هم‌پیوسته؛ یک چالش آرام و آفلاین" : L"Five connected grids. One thoughtful offline challenge.",
+            senior ? RGB(51, 65, 85) : RGB(81, 97, 117), infoFont);
 
         int btn_w = senior ? 360 : 300;
         int btn_h = senior ? 55 : 46;
@@ -160,12 +194,12 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         RECT r5 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 4, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 4 + btn_h};
         RECT r6 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 5, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 5 + btn_h};
 
-        COLORREF btn_bg = senior ? RGB(224, 231, 255) : RGB(235, 240, 248);
-        COLORREF btn_txt = RGB(15, 23, 42);
+        COLORREF btn_bg = senior ? RGB(224, 231, 255) : RGB(232, 238, 247);
+        COLORREF btn_txt = RGB(20, 31, 51);
 
-        DrawButtonW(memDC, r1, is_fa ? L"۱. ادامه‌ی بازی" : L"1. Continue Game", btn_bg, btn_txt, buttonFont);
-        DrawButtonW(memDC, r2, is_fa ? L"۲. بازی جدید" : L"2. New Game", btn_bg, btn_txt, buttonFont);
-        DrawButtonW(memDC, r3, is_fa ? (senior ? L"۳. پوسته: پرکنتراست / مسن" : L"۳. پوسته: مدرن") : (senior ? L"3. Theme: SENIOR (High-Contrast)" : L"3. Theme: MODERN"), btn_bg, btn_txt, buttonFont);
+        DrawButtonW(memDC, r1, is_fa ? L"۱. ادامه‌ی بازی" : L"1. Continue Game", RGB(37, 99, 235), RGB(255, 255, 255), buttonFont);
+        DrawButtonW(memDC, r2, is_fa ? L"۲. بازی جدید" : L"2. New Game", RGB(13, 148, 136), RGB(255, 255, 255), buttonFont);
+        DrawButtonW(memDC, r3, is_fa ? (senior ? L"۳. پوسته: پرکنتراست" : L"۳. پوسته: مدرن") : (senior ? L"3. Theme: HIGH CONTRAST" : L"3. Theme: MODERN"), btn_bg, btn_txt, buttonFont);
         DrawButtonW(memDC, r4, is_fa ? L"۴. تغییر زبان (فارسی / English)" : L"4. Change Language (EN / FA)", btn_bg, btn_txt, buttonFont);
         DrawButtonW(memDC, r5, is_fa ? L"۵. راهنمای کلیدها" : L"5. Controls Guide", btn_bg, btn_txt, buttonFont);
         DrawButtonW(memDC, r6, is_fa ? L"۶. خروج از برنامه" : L"6. Quit Game", btn_bg, btn_txt, buttonFont);
@@ -197,7 +231,7 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         DrawButtonW(memDC, r2, is_fa ? L"۲. متوسط (Medium)" : L"2. Medium", btn_bg, btn_txt, buttonFont);
         DrawButtonW(memDC, r3, is_fa ? L"۳. سخت (Hard)" : L"3. Hard", btn_bg, btn_txt, buttonFont);
         DrawButtonW(memDC, r4, is_fa ? L"۴. حرفه‌ای (Expert)" : L"4. Expert", btn_bg, btn_txt, buttonFont);
-        DrawButtonW(memDC, r5, is_fa ? L"۵. غول (Master)" : L"5. Master (Monster)", btn_bg, btn_txt, buttonFont);
+        DrawButtonW(memDC, r5, is_fa ? L"۵. استاد (Master)" : L"5. Master", btn_bg, btn_txt, buttonFont);
         DrawButtonW(memDC, r6, is_fa ? L"بازگشت به منوی اصلی >" : L"< Back to Main Menu", RGB(254, 226, 226), RGB(153, 27, 27), buttonFont);
     }
     // -------------------------------------------------------------
@@ -221,7 +255,7 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
                 L"کلید Shift + اعداد یا کلید N: فعال/غیرفعال‌سازی حالت یادداشت‌گذاری",
                 L"کلید Ctrl + Z: بازگشت به حرکت قبلی (Undo)",
                 L"کلید ESC: باز کردن منوی بازی",
-                L"حالت مسن/پرکنتراست: برای وضوح، خوانایی و فونت‌های درشت‌تر"
+                L"حالت پرکنتراست برای خوانایی بهتر و فونت‌های درشت‌تر"
             };
         } else {
             lines = {
@@ -232,7 +266,7 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
                 L"Shift + 1-9 or 'N' Key: Toggle Pencil Notes mode.",
                 L"Ctrl + Z: Undo previous move.",
                 L"ESC: Open Game Menu.",
-                L"High-Contrast Mode: Designed for optimal visibility and readability."
+                L"High-Contrast Theme: Larger text and clearer visual separation."
             };
         }
 
@@ -254,8 +288,13 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         HBRUSH headerBrush = CreateSolidBrush(head_bg);
         FillRect(memDC, &headerRect, headerBrush);
         DeleteObject(headerBrush);
+        RECT headerAccent = {0, header_height - 3, width, header_height};
+        HBRUSH accentBrush = CreateSolidBrush(RGB(13, 148, 136));
+        FillRect(memDC, &headerAccent, accentBrush);
+        DeleteObject(accentBrush);
 
         SelectObject(memDC, infoFont);
+        SetTextColor(memDC, head_txt);
         SetBkMode(memDC, TRANSPARENT);
 
         // Header Labels
@@ -326,11 +365,11 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         COLORREF action_bg = senior ? RGB(224, 231, 255) : RGB(235, 240, 248);
         COLORREF active_notes_bg = RGB(254, 240, 138);
 
-        DrawButtonW(memDC, ui.btn_undo, is_fa ? L"Undo (برگشت)" : L"Undo", action_bg, RGB(15, 23, 42), buttonFont);
+        DrawButtonW(memDC, ui.btn_undo, is_fa ? L"بازگردانی" : L"Undo", action_bg, RGB(15, 23, 42), buttonFont);
         DrawButtonW(memDC, ui.btn_erase, is_fa ? L"پاک‌کن" : L"Erase Cell", action_bg, RGB(15, 23, 42), buttonFont);
         DrawButtonW(memDC, ui.btn_notes, is_fa ? (ui.note_mode ? L"یادداشت [روشن]" : L"یادداشت [خاموش]") : (ui.note_mode ? L"Notes [ON]" : L"Notes [OFF]"), ui.note_mode ? active_notes_bg : action_bg, RGB(15, 23, 42), buttonFont);
         DrawButtonW(memDC, ui.btn_reset, is_fa ? L"ریست بازی" : L"Reset Game", action_bg, RGB(15, 23, 42), buttonFont);
-        DrawButtonW(memDC, ui.btn_theme, is_fa ? (senior ? L"پوسته مسن" : L"پوسته مدرن") : (senior ? L"Senior UI" : L"Modern UI"), action_bg, RGB(15, 23, 42), buttonFont);
+        DrawButtonW(memDC, ui.btn_theme, is_fa ? (senior ? L"پوسته پرکنتراست" : L"پوسته مدرن") : (senior ? L"High Contrast" : L"Modern Theme"), action_bg, RGB(15, 23, 42), buttonFont);
         DrawButtonW(memDC, ui.btn_lang, is_fa ? L"زبان: فارسی" : L"Lang: English", action_bg, RGB(15, 23, 42), buttonFont);
         DrawButtonW(memDC, ui.btn_menu, is_fa ? L"منوی اصلی (ESC)" : L"Main Menu (ESC)", action_bg, RGB(15, 23, 42), buttonFont);
 
@@ -385,7 +424,7 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
                 FillRect(memDC, &cRect, cBrush);
                 DeleteObject(cBrush);
 
-                HPEN thinPen = CreatePen(PS_SOLID, 1, RGB(180, 190, 200));
+                HPEN thinPen = CreatePen(PS_SOLID, 1, RGB(194, 205, 217));
                 HPEN oldPen = (HPEN)SelectObject(memDC, thinPen);
 
                 MoveToEx(memDC, cell_left, cell_top, NULL);
@@ -525,7 +564,7 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
                     L"۱. ادامه‌ی بازی",
                     L"۲. شروع مجدد همین بازی",
                     L"۳. بازی جدید",
-                    L"۴. تغییر پوسته (مسن / مدرن)",
+                    L"۴. تغییر پوسته (پرکنتراست / مدرن)",
                     L"۵. خروج به منوی اصلی"
                 };
             } else {
@@ -533,7 +572,7 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
                     L"[1] Resume Game",
                     L"[2] Restart Current Game",
                     L"[3] New Game",
-                    L"[4] Toggle Senior/Modern UI",
+                    L"[4] Toggle Contrast/Modern Theme",
                     L"[5 / ESC] Main Menu"
                 };
             }
