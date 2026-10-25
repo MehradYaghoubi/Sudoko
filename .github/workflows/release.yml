@@ -1,0 +1,64 @@
+name: Build and publish Windows release
+
+on:
+  push:
+    branches:
+      - main
+      - feat/samurai-sudoku-cpp-win32-17644616120448962836
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install MinGW cross-compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y g++-mingw-w64-x86-64 make zip
+
+      - name: Build and package
+        run: |
+          make clean
+          make
+          mkdir -p dist/package
+          cp samurai_sudoku.exe README.md TECHNICAL_DOCUMENTATION.md dist/package/
+          cd dist/package
+          sha256sum samurai_sudoku.exe > SHA256SUMS
+          zip -j ../samurai-sudoku-windows-x64.zip samurai_sudoku.exe README.md TECHNICAL_DOCUMENTATION.md SHA256SUMS
+          cp SHA256SUMS ../SHA256SUMS
+
+      - name: Save build files
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-release-files
+          path: |
+            dist/samurai-sudoku-windows-x64.zip
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build files
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: windows-release-files
+          path: release-files
+
+      - name: Attach assets to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" release-files/samurai-sudoku-windows-x64.zip release-files/SHA256SUMS --clobber
