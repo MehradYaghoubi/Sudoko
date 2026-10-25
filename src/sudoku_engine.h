@@ -57,7 +57,7 @@ class SamuraiSudoku {
 public:
     Cell board[21][21];
     Difficulty difficulty = Difficulty::Medium;
-    Language language = Language::Persian;
+    Language language = Language::English;
     int elapsed_seconds = 0;
     int error_count = 0;
     std::vector<MoveHistory> history;
