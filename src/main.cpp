@@ -61,6 +61,17 @@ void StartNewGameThread(HWND hwnd, Difficulty diff) {
     }).detach();
 }
 
+static bool HasSavedPuzzle() {
+    for (int r = 0; r < 21; ++r) {
+        for (int c = 0; c < 21; ++c) {
+            if (SamuraiSudoku::is_valid_cell(r, c) && g_game.board[r][c].is_given) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 static bool IsInRect(int x, int y, RECT r) {
     return (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
 }
@@ -139,7 +150,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             RECT r6 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 5, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 5 + btn_h};
 
             if (IsInRect(x, y, r1)) {
-                g_ui.screen = AppScreen::InGame;
+                g_ui.screen = HasSavedPuzzle() ? AppScreen::InGame : AppScreen::DifficultySelect;
             } else if (IsInRect(x, y, r2)) {
                 g_ui.screen = AppScreen::DifficultySelect;
             } else if (IsInRect(x, y, r3)) {
@@ -342,7 +353,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
 
         if (g_ui.screen == AppScreen::MainMenu) {
-            if (wParam == '1') g_ui.screen = AppScreen::InGame;
+            if (wParam == '1') g_ui.screen = HasSavedPuzzle() ? AppScreen::InGame : AppScreen::DifficultySelect;
             else if (wParam == '2') g_ui.screen = AppScreen::DifficultySelect;
             else if (wParam == '3') { g_ui.senior_mode = !g_ui.senior_mode; SaveGame(); }
             else if (wParam == '4') { g_game.language = (g_game.language == Language::English) ? Language::Persian : Language::English; SaveGame(); }
