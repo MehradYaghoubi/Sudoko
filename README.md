@@ -1,49 +1,42 @@
-# Samurai Sudoku (Windows Portable)
+# Samurai Sudoku for Windows
 
-A lightweight, high-performance, offline **Samurai Sudoku** desktop application for Windows (Windows 8.1 / 10 / 11).
+An offline desktop implementation of Samurai Sudoku in C++ using the Win32 API and GDI. The board contains five overlapping 9×9 grids.
 
-Built natively in C++ using Win32 API and GDI graphics with zero external dependencies or heavy web frameworks.
+## Features
 
----
+- Procedurally generated puzzles with a unique-solution check
+- Easy, medium and hard difficulty settings
+- Keyboard and mouse input, pencil notes and undo
+- Borderless fullscreen and windowed play
+- Automatic save and resume through save.json
+- English and Persian interface support
 
-## Key Features
+## Run on Windows
 
-- **Classic 5-Grid Samurai Sudoku Layout**: Top-Left, Top-Right, Center, Bottom-Left, Bottom-Right with overlapping 3x3 regions.
-- **Unique Solution Generator**: Guarantees procedural generation of puzzles with unique solutions.
-- **3 Difficulty Levels**: Easy (~220 givens), Medium (~180 givens), Hard (~150 givens).
-- **Fullscreen Window Experience**: Opens immediately in seamless borderless fullscreen window mode.
-- **Controls**:
-  - **Keyboard**: Arrow keys for navigation, `1`-`9` for digit placement, `Delete` / `Backspace` to erase, `Shift + 1-9` or `N` key to toggle pencil notes mode, `Ctrl + Z` to Undo.
-  - **Mouse & Pop-up Selector**: Click any empty cell to select it. Click again or right-click to open a pop-up number/note selector.
-- **Loading Scene**: Asynchronous puzzle generation with a clean loading overlay.
-- **Auto-Save & Resume**: State automatically saved to `save.json` next to the executable on every move and restored on startup.
-- **ESC Game Menu**: Press `ESC` anytime to open the simple in-game menu (Resume, New Game, Quit).
+Download samurai_sudoku.exe from this repository and run it on Windows 8.1 or later. It is portable and does not require an installer. Windows may show a security prompt for an unsigned executable; run only binaries you trust.
 
----
+## Build from source
 
-## Requirements & Building
+The Makefile uses g++, make and a MinGW-w64 cross-compiler.
 
-### Pre-built Binary
-The standalone Portable executable is generated as:
-```text
-samurai_sudoku.exe
-```
-No installation required. Simply run `samurai_sudoku.exe` on Windows 8.1+.
-
-### Building from Source (Linux Cross-Compilation)
-Dependencies: `g++`, `mingw-w64`, `make`.
-
-Run:
 ```bash
 make
-```
-
-To run unit tests:
-```bash
 make test
 ```
 
-To clean build artifacts:
-```bash
-make clean
-```
+Use make clean to remove generated build files. Source is under src/ and engine tests are under tests/. This project targets Win32 and is not a native Linux application.
+
+## Controls
+
+| Action | Control |
+| --- | --- |
+| Move selection | Arrow keys |
+| Enter a digit | 1–9 |
+| Erase a value | Delete or Backspace |
+| Toggle notes | N or Shift + digit |
+| Undo | Ctrl + Z |
+| Open game menu | Esc |
+
+Select an empty cell with the mouse; click again or right-click to open the number and notes selector.
+
+Detailed implementation notes are in [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md). Save data is written beside the executable, so that directory must be writable.
