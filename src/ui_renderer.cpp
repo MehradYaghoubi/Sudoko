@@ -197,7 +197,7 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         COLORREF btn_bg = senior ? RGB(224, 231, 255) : RGB(232, 238, 247);
         COLORREF btn_txt = RGB(20, 31, 51);
 
-        DrawButtonW(memDC, r1, is_fa ? L"۱. ادامه‌ی بازی" : L"1. Continue Game", RGB(37, 99, 235), RGB(255, 255, 255), buttonFont);
+        DrawButtonW(memDC, r1, is_fa ? L"ادامه / شروع بازی" : L"Continue / Start", RGB(37, 99, 235), RGB(255, 255, 255), buttonFont);
         DrawButtonW(memDC, r2, is_fa ? L"۲. بازی جدید" : L"2. New Game", RGB(13, 148, 136), RGB(255, 255, 255), buttonFont);
         DrawButtonW(memDC, r3, is_fa ? (senior ? L"۳. پوسته: پرکنتراست" : L"۳. پوسته: مدرن") : (senior ? L"3. Theme: HIGH CONTRAST" : L"3. Theme: MODERN"), btn_bg, btn_txt, buttonFont);
         DrawButtonW(memDC, r4, is_fa ? L"۴. تغییر زبان (فارسی / English)" : L"4. Change Language (EN / FA)", btn_bg, btn_txt, buttonFont);
