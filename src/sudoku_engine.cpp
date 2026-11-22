@@ -42,6 +42,7 @@ void SamuraiSudoku::reset() {
     history.clear();
     elapsed_seconds = 0;
     error_count = 0;
+    check_revealed = false;
 }
 
 void SamuraiSudoku::reset_to_initial() {
@@ -256,7 +257,7 @@ bool SamuraiSudoku::generate_puzzle(Difficulty diff) {
 }
 
 bool SamuraiSudoku::set_cell_value(int r, int c, int val) {
-    if (!is_valid_cell(r, c) || board[r][c].is_given) return false;
+    if (!is_valid_cell(r, c) || board[r][c].is_given || val < 0 || val > 9) return false;
 
     if (board[r][c].value == val) return false;
 
@@ -330,7 +331,8 @@ bool SamuraiSudoku::undo() {
     return true;
 }
 
-void SamuraiSudoku::recheck_errors() {
+void SamuraiSudoku::recheck_errors(bool reveal) {
+    check_revealed = reveal;
     int current_grid[21][21];
     for (int r = 0; r < 21; ++r) {
         for (int c = 0; c < 21; ++c) {
@@ -338,6 +340,9 @@ void SamuraiSudoku::recheck_errors() {
             board[r][c].is_error = false;
         }
     }
+
+    error_count = 0;
+    if (manual_check && !reveal) return;
 
     int errors = 0;
     for (int r = 0; r < 21; ++r) {
@@ -375,6 +380,7 @@ std::string SamuraiSudoku::serialize_to_json(bool senior_mode) const {
     ss << "  \"elapsed_seconds\": " << elapsed_seconds << ",\n";
     ss << "  \"error_count\": " << error_count << ",\n";
     ss << "  \"senior_mode\": " << (senior_mode ? "true" : "false") << ",\n";
+    ss << "  \"manual_check\": " << (manual_check ? "true" : "false") << ",\n";
     ss << "  \"cells\": [\n";
 
     bool first = true;
@@ -426,6 +432,9 @@ bool SamuraiSudoku::deserialize_from_json(const std::string& json_str, bool& out
 
     std::string smode_str = find_val("senior_mode");
     if (!smode_str.empty()) out_senior_mode = (smode_str == "true");
+
+    std::string manual_str = find_val("manual_check");
+    manual_check = manual_str.empty() || manual_str == "true";
 
     size_t cells_pos = json_str.find("\"cells\"");
     if (cells_pos == std::string::npos) return false;

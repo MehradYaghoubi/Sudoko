@@ -131,3 +131,9 @@ make clean
 - Master difficulty clue reduction targets.
 - Game state reset and anti-pattern transformations.
 - JSON serialization and deserialization integrity.
+
+## Manual checking and adaptive layout
+
+`SamuraiSudoku::manual_check` defaults to true. Move, erase, reset and undo paths call `recheck_errors()` to clear displayed feedback in this mode. `recheck_errors(true)` explicitly reveals current errors and sets `check_revealed`; the renderer and timer use that state so completion is not disclosed before checking. Automatic mode preserves immediate feedback. JSON stores `manual_check`; older files without the field default to manual. Check results are intentionally not restored on load.
+
+`UIRenderer::UpdateLayout` owns the rectangles used by both drawing and mouse input. At widths below 960 pixels the nine tools move into a three-column bottom panel. The native minimum client size is 560 × 600. Header information uses two rows; menu controls fit the client area; guide text wraps. Pause input is intercepted before popup, tool or board input. Native regression checks are in `tests/test_layout.cpp` and `tests/test_input.cpp`.

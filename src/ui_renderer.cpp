@@ -2,6 +2,7 @@
 #include <string>
 #include <cstdio>
 #include <vector>
+#include <algorithm>
 
 // Theme Color Definitions
 const COLORREF MODERN_BG = RGB(246, 248, 252);
@@ -15,9 +16,9 @@ const COLORREF MODERN_SAME_NUM_BG = RGB(224, 242, 241);
 const COLORREF MODERN_ERROR_BG = RGB(255, 205, 210);
 
 const COLORREF MODERN_TEXT_GIVEN = RGB(20, 20, 20);
-const COLORREF MODERN_TEXT_USER = RGB(15, 118, 110);
-const COLORREF MODERN_TEXT_ERROR = RGB(211, 47, 47);
-const COLORREF MODERN_TEXT_NOTE = RGB(100, 116, 139);
+const COLORREF MODERN_TEXT_USER = RGB(12, 87, 81);
+const COLORREF MODERN_TEXT_ERROR = RGB(175, 25, 25);
+const COLORREF MODERN_TEXT_NOTE = RGB(71, 85, 105);
 
 // Senior / High-Contrast Theme
 const COLORREF SENIOR_BG = RGB(255, 255, 255);
@@ -25,14 +26,14 @@ const COLORREF SENIOR_HEADER_BG = RGB(15, 23, 42);
 const COLORREF SENIOR_HEADER_TEXT = RGB(255, 255, 255);
 const COLORREF SENIOR_CELL_BG = RGB(255, 255, 255);
 const COLORREF SENIOR_GIVEN_BG = RGB(226, 232, 240);
-const COLORREF SENIOR_OVERLAP_BG = RGB(254, 240, 138);
+const COLORREF SENIOR_OVERLAP_BG = RGB(235, 242, 252);
 const COLORREF SENIOR_SELECTED_BG = RGB(147, 197, 253);
 const COLORREF SENIOR_SAME_NUM_BG = RGB(191, 219, 254);
 const COLORREF SENIOR_ERROR_BG = RGB(254, 202, 202);
 
 const COLORREF SENIOR_TEXT_GIVEN = RGB(0, 0, 0);
-const COLORREF SENIOR_TEXT_USER = RGB(2, 132, 199);
-const COLORREF SENIOR_TEXT_ERROR = RGB(185, 28, 28);
+const COLORREF SENIOR_TEXT_USER = RGB(3, 75, 125);
+const COLORREF SENIOR_TEXT_ERROR = RGB(175, 25, 25);
 const COLORREF SENIOR_TEXT_NOTE = RGB(51, 65, 85);
 
 std::wstring UIRenderer::Utf8ToWide(const std::string& utf8_str) {
@@ -66,8 +67,8 @@ void UIRenderer::GetCellFromPos(int mouse_x, int mouse_y, const UIState& ui, int
 
 int UIRenderer::GetPopupNumberFromPos(int mouse_x, int mouse_y, const UIState& ui) {
     if (!ui.show_number_popup) return 0;
-    if (mouse_x < ui.popup_rect.left || mouse_x > ui.popup_rect.right ||
-        mouse_y < ui.popup_rect.top || mouse_y > ui.popup_rect.bottom) {
+    if (mouse_x < ui.popup_rect.left || mouse_x >= ui.popup_rect.right ||
+        mouse_y < ui.popup_rect.top || mouse_y >= ui.popup_rect.bottom) {
         return 0;
     }
 
@@ -94,10 +95,11 @@ int UIRenderer::GetPopupNumberFromPos(int mouse_x, int mouse_y, const UIState& u
 }
 
 static void DrawTextW_Centered(HDC hdc, RECT rect, const std::wstring& wtext, COLORREF textColor, HFONT font) {
-    SelectObject(hdc, font);
+    HGDIOBJ oldFont = SelectObject(hdc, font);
     SetTextColor(hdc, textColor);
     SetBkMode(hdc, TRANSPARENT);
-    DrawTextW(hdc, wtext.c_str(), (int)wtext.size(), &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    DrawTextW(hdc, wtext.c_str(), (int)wtext.size(), &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+    SelectObject(hdc, oldFont);
 }
 
 static void DrawButtonW(HDC hdc, RECT rect, const std::wstring& text, COLORREF bg, COLORREF textColor, HFONT font) {
@@ -139,7 +141,43 @@ static void DrawBrandMark(HDC hdc, int center_x, int top) {
     DeleteObject(gridPen);
 }
 
-void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& game, const UIState& ui) {
+void UIRenderer::UpdateLayout(int width, int height, UIState& ui) {
+    const int menu_w = (std::min)(width - 48, 400);
+    const int menu_h = ui.senior_mode ? 50 : 44;
+    const int start = (std::max)(150, (height - (menu_h + 10) * 6) / 2 + 40);
+    for (int i = 0; i < 6; ++i)
+        ui.menu_buttons[i] = {width / 2 - menu_w / 2, start + i * (menu_h + 10),
+                             width / 2 + menu_w / 2, start + i * (menu_h + 10) + menu_h};
+    if (ui.screen == AppScreen::ControlsGuide)
+        ui.menu_buttons[0] = {width / 2 - menu_w / 2, height - 70, width / 2 + menu_w / 2, height - 24};
+    const bool wide = width >= 960;
+    const int board_w = width - 48 - (wide ? 244 : 0);
+    const int board_h = height - (wide ? 148 : 260);
+    ui.cell_size = (std::max)(1, (std::min)(board_w, board_h) / 21);
+    const int grid = ui.cell_size * 21;
+    ui.grid_origin_x = (width - grid - (wide ? 244 : 0)) / 2;
+    ui.grid_origin_y = (wide ? 100 : 92) + (board_h - grid) / 2;
+    ui.grid_rect = {ui.grid_origin_x, ui.grid_origin_y, ui.grid_origin_x + grid, ui.grid_origin_y + grid};
+    RECT* buttons[] = {&ui.btn_check, &ui.btn_check_mode, &ui.btn_notes, &ui.btn_undo,
+                      &ui.btn_erase, &ui.btn_reset, &ui.btn_theme, &ui.btn_lang, &ui.btn_menu};
+    const int bh = wide ? (std::min)(46, (height - 140 - 64) / 9) : 40;
+    const int bw = wide ? 216 : (width - 64) / 3;
+    const int x = wide ? ui.grid_rect.right + 28 : (width - (3 * bw + 16)) / 2;
+    const int y = wide ? 76 + (height - 76 - (9 * bh + 64)) / 2 : ui.grid_rect.bottom + 16;
+    for (int i = 0; i < 9; ++i) {
+        const int bx = x + (wide ? 0 : i % 3 * (bw + 8));
+        const int by = y + (wide ? i * (bh + 8) : i / 3 * (bh + 8));
+        *buttons[i] = {bx, by, bx + bw, by + bh};
+    }
+    const int pause_w = (std::min)(width - 64, 440);
+    for (int i = 0; i < 5; ++i)
+        ui.pause_buttons[i] = {width / 2 - pause_w / 2, height / 2 - 100 + i * 52,
+                              width / 2 + pause_w / 2, height / 2 - 56 + i * 52};
+}
+
+void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& game, UIState& ui) {
+    if (width <= 0 || height <= 0) return;
+    UpdateLayout(width, height, ui);
     HDC memDC = CreateCompatibleDC(hdc);
     HBITMAP memBitmap = CreateCompatibleBitmap(hdc, width, height);
     HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
@@ -175,32 +213,28 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
 
         DrawBrandMark(memDC, width / 2, 22);
         std::wstring main_title = is_fa ? L"سودوکو سامورایی" : L"SAMURAI SUDOKU";
-        RECT titleRect = {0, height / 10, width, height / 5};
+        RECT titleRect = {24, 70, width - 24, 116};
         DrawTextW_Centered(memDC, titleRect, main_title, senior ? RGB(15, 23, 42) : RGB(20, 31, 51), titleFont);
-        RECT subtitleRect = {width / 10, height / 5, width * 9 / 10, height / 5 + 30};
+        RECT subtitleRect = {24, 116, width - 24, 146};
         DrawTextW_Centered(memDC, subtitleRect,
             is_fa ? L"پنج جدول به‌هم‌پیوسته؛ یک چالش آرام و آفلاین" : L"Five connected grids. One thoughtful offline challenge.",
             senior ? RGB(51, 65, 85) : RGB(81, 97, 117), infoFont);
 
-        int btn_w = senior ? 360 : 300;
-        int btn_h = senior ? 55 : 46;
-        int start_y = height / 4 + 20;
-        int gap = senior ? 18 : 14;
+        const RECT& r1 = ui.menu_buttons[0];
+        const RECT& r2 = ui.menu_buttons[1];
+        const RECT& r3 = ui.menu_buttons[2];
+        const RECT& r4 = ui.menu_buttons[3];
+        const RECT& r5 = ui.menu_buttons[4];
+        const RECT& r6 = ui.menu_buttons[5];
 
-        RECT r1 = {width / 2 - btn_w / 2, start_y, width / 2 + btn_w / 2, start_y + btn_h};
-        RECT r2 = {width / 2 - btn_w / 2, start_y + (btn_h + gap), width / 2 + btn_w / 2, start_y + (btn_h + gap) + btn_h};
-        RECT r3 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 2, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 2 + btn_h};
-        RECT r4 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 3, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 3 + btn_h};
-        RECT r5 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 4, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 4 + btn_h};
-        RECT r6 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 5, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 5 + btn_h};
 
         COLORREF btn_bg = senior ? RGB(224, 231, 255) : RGB(232, 238, 247);
         COLORREF btn_txt = RGB(20, 31, 51);
 
         DrawButtonW(memDC, r1, is_fa ? L"ادامه / شروع بازی" : L"Continue / Start", RGB(37, 99, 235), RGB(255, 255, 255), buttonFont);
-        DrawButtonW(memDC, r2, is_fa ? L"۲. بازی جدید" : L"2. New Game", RGB(13, 148, 136), RGB(255, 255, 255), buttonFont);
-        DrawButtonW(memDC, r3, is_fa ? (senior ? L"۳. پوسته: پرکنتراست" : L"۳. پوسته: مدرن") : (senior ? L"3. Theme: HIGH CONTRAST" : L"3. Theme: MODERN"), btn_bg, btn_txt, buttonFont);
-        DrawButtonW(memDC, r4, is_fa ? L"۴. تغییر زبان (فارسی / English)" : L"4. Change Language (EN / FA)", btn_bg, btn_txt, buttonFont);
+        DrawButtonW(memDC, r2, is_fa ? L"۲. بازی جدید" : L"2. New Game", RGB(15, 118, 110), RGB(255, 255, 255), buttonFont);
+        DrawButtonW(memDC, r3, is_fa ? (senior ? L"۳. پوسته: پرکنتراست" : L"۳. پوسته: مدرن") : (senior ? L"3. High contrast" : L"3. Modern theme"), btn_bg, btn_txt, buttonFont);
+        DrawButtonW(memDC, r4, is_fa ? L"۴. تغییر زبان (فارسی / English)" : L"4. Language: English / فارسی", btn_bg, btn_txt, buttonFont);
         DrawButtonW(memDC, r5, is_fa ? L"۵. راهنمای کلیدها" : L"5. Controls Guide", btn_bg, btn_txt, buttonFont);
         DrawButtonW(memDC, r6, is_fa ? L"۶. خروج از برنامه" : L"6. Quit Game", btn_bg, btn_txt, buttonFont);
     }
@@ -209,20 +243,16 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
     // -------------------------------------------------------------
     else if (ui.screen == AppScreen::DifficultySelect) {
         std::wstring diff_title = is_fa ? L"انتخاب سطح سختی" : L"SELECT DIFFICULTY LEVEL";
-        RECT titleRect = {0, height / 8, width, height / 4};
+        RECT titleRect = {24, 70, width - 24, 126};
         DrawTextW_Centered(memDC, titleRect, diff_title, senior ? RGB(15, 23, 42) : RGB(30, 40, 60), titleFont);
 
-        int btn_w = senior ? 360 : 300;
-        int btn_h = senior ? 52 : 44;
-        int start_y = height / 3 - 20;
-        int gap = senior ? 16 : 12;
+        const RECT& r1 = ui.menu_buttons[0];
+        const RECT& r2 = ui.menu_buttons[1];
+        const RECT& r3 = ui.menu_buttons[2];
+        const RECT& r4 = ui.menu_buttons[3];
+        const RECT& r5 = ui.menu_buttons[4];
+        const RECT& r6 = ui.menu_buttons[5];
 
-        RECT r1 = {width / 2 - btn_w / 2, start_y, width / 2 + btn_w / 2, start_y + btn_h};
-        RECT r2 = {width / 2 - btn_w / 2, start_y + (btn_h + gap), width / 2 + btn_w / 2, start_y + (btn_h + gap) + btn_h};
-        RECT r3 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 2, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 2 + btn_h};
-        RECT r4 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 3, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 3 + btn_h};
-        RECT r5 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 4, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 4 + btn_h};
-        RECT r6 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 5, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 5 + btn_h};
 
         COLORREF btn_bg = senior ? RGB(224, 231, 255) : RGB(235, 240, 248);
         COLORREF btn_txt = RGB(15, 23, 42);
@@ -242,126 +272,74 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         RECT titleRect = {0, height / 10, width, height / 6};
         DrawTextW_Centered(memDC, titleRect, guide_title, senior ? RGB(15, 23, 42) : RGB(30, 40, 60), titleFont);
 
-        int y = height / 4;
-        int step = senior ? 36 : 28;
+        int y = 140;
+        int step = (height - 230) / 9;
 
         std::vector<std::wstring> lines;
         if (is_fa) {
             lines = {
-                L"ماوس: کلیک روی خانه برای انتخاب / کلیک مجدد یا راست‌کلیک برای باز کردن صفحه انتخاب عدد",
+                L"ماوس: انتخاب خانه؛ کلیک دوباره یا راست‌کلیک: انتخاب عدد",
                 L"کلیدهای جهت‌نما: حرکت خانه انتخابی روی ۵ جدول سودوکو",
                 L"کیبورد ۱ تا ۹: ورود عدد در خانه انتخابی",
                 L"کلید Delete یا Backspace: پاک کردن خانه انتخابی",
                 L"کلید Shift + اعداد یا کلید N: فعال/غیرفعال‌سازی حالت یادداشت‌گذاری",
                 L"کلید Ctrl + Z: بازگشت به حرکت قبلی (Undo)",
                 L"کلید ESC: باز کردن منوی بازی",
+                L"کلید C یا دکمه بررسی: نمایش خطاها در حالت بررسی دستی",
                 L"حالت پرکنتراست برای خوانایی بهتر و فونت‌های درشت‌تر"
             };
         } else {
             lines = {
-                L"Mouse: Click cell to select. Click again or Right-click to open Pop-up keypad.",
+                L"Mouse: Select a cell; click again or right-click for the keypad.",
                 L"Arrow Keys: Navigate selected cell across the 5 overlapping grids.",
                 L"Numbers 1-9: Enter digit into selected cell.",
                 L"Delete / Backspace: Clear selected cell.",
                 L"Shift + 1-9 or 'N' Key: Toggle Pencil Notes mode.",
                 L"Ctrl + Z: Undo previous move.",
                 L"ESC: Open Game Menu.",
+                L"C / Check: Reveal errors. Manual checking hides feedback until requested.",
                 L"High-Contrast Theme: Larger text and clearer visual separation."
             };
         }
 
         for (size_t i = 0; i < lines.size(); ++i) {
-            RECT lRect = {0, y + (int)i * step, width, y + ((int)i + 1) * step};
-            DrawTextW_Centered(memDC, lRect, lines[i], senior ? RGB(15, 23, 42) : RGB(30, 40, 60), infoFont);
+            RECT lRect = {32, y + (int)i * step, width - 32, y + ((int)i + 1) * step - 6};
+            SelectObject(memDC, infoFont);
+            SetTextColor(memDC, RGB(30, 40, 60));
+            DrawTextW(memDC, lines[i].c_str(), -1, &lRect, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
         }
 
-        RECT r_back = {width / 2 - 150, y + (int)lines.size() * step + 20, width / 2 + 150, y + (int)lines.size() * step + 65};
+        RECT r_back = ui.menu_buttons[0];
         DrawButtonW(memDC, r_back, is_fa ? L"بازگشت به منوی اصلی" : L"< Back to Main Menu", RGB(224, 231, 255), RGB(15, 23, 42), buttonFont);
     }
     // -------------------------------------------------------------
     // SCREEN 4: IN-GAME BOARD & RESPONSIVE LAYOUT
     // -------------------------------------------------------------
     else if (ui.screen == AppScreen::InGame) {
-        // Guaranteed Fixed Header Bar Height
-        int header_height = senior ? 55 : 45;
+        const int header_height = 76;
         RECT headerRect = {0, 0, width, header_height};
         HBRUSH headerBrush = CreateSolidBrush(head_bg);
         FillRect(memDC, &headerRect, headerBrush);
         DeleteObject(headerBrush);
-        RECT headerAccent = {0, header_height - 3, width, header_height};
-        HBRUSH accentBrush = CreateSolidBrush(RGB(13, 148, 136));
-        FillRect(memDC, &headerAccent, accentBrush);
-        DeleteObject(accentBrush);
-
-        SelectObject(memDC, infoFont);
-        SetTextColor(memDC, head_txt);
-        SetBkMode(memDC, TRANSPARENT);
-
-        // Header Labels
-        std::wstring app_name = is_fa ? L"سودوکو سامورایی" : L"SAMURAI SUDOKU";
-        RECT r_app = {20, 0, 220, header_height};
-        DrawTextW(memDC, app_name.c_str(), (int)app_name.size(), &r_app, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-
-        const std::wstring diff_names_en[] = {L"Easy", L"Medium", L"Hard", L"Expert", L"Master"};
-        const std::wstring diff_names_fa[] = {L"آسان", L"متوسط", L"سخت", L"حرفه‌ای", L"غول"};
-        std::wstring dname = is_fa ? diff_names_fa[static_cast<int>(game.difficulty)] : diff_names_en[static_cast<int>(game.difficulty)];
-
-        wchar_t diff_str[64];
-        swprintf(diff_str, 64, is_fa ? L"سختی: %s" : L"Diff: %s", dname.c_str());
-        RECT r_diff = {240, 0, 400, header_height};
-        DrawTextW(memDC, diff_str, (int)wcslen(diff_str), &r_diff, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-
-        int mins = game.elapsed_seconds / 60;
-        int secs = game.elapsed_seconds % 60;
-        wchar_t time_str[64];
-        swprintf(time_str, 64, is_fa ? L"زمان: %02d:%02d" : L"Time: %02d:%02d", mins, secs);
-        RECT r_time = {410, 0, 560, header_height};
-        DrawTextW(memDC, time_str, (int)wcslen(time_str), &r_time, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-
-        wchar_t err_str[64];
-        swprintf(err_str, 64, is_fa ? L"خطاها: %d" : L"Errors: %d", game.error_count);
-        RECT r_err = {570, 0, 700, header_height};
-        DrawTextW(memDC, err_str, (int)wcslen(err_str), &r_err, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-
-        // Strictly Enforce Board Calculation below Header (origin_y >= header_height + 15)
-        int min_header_margin = 15;
-        int sidebar_width = senior ? 180 : 150;
-        int gap_board_side = 20;
-
-        int avail_w = width - sidebar_width - gap_board_side - 40;
-        int avail_h = height - header_height - min_header_margin - 20;
-
-        int grid_px = avail_w < avail_h ? avail_w : avail_h;
-        int cell_sz = grid_px / 21;
-        if (cell_sz < 12) cell_sz = 12;
-        grid_px = cell_sz * 21;
-
-        int origin_x = 20;
-        int origin_y = header_height + min_header_margin + (avail_h - grid_px) / 2;
-        if (origin_y < header_height + min_header_margin) origin_y = header_height + min_header_margin;
-
-        UIState* mutable_ui = const_cast<UIState*>(&ui);
-        mutable_ui->cell_size = cell_sz;
-        mutable_ui->grid_origin_x = origin_x;
-        mutable_ui->grid_origin_y = origin_y;
-
-        // Position Action Sidebar Buttons safely to the Right of Grid
-        int sidebar_x = origin_x + grid_px + gap_board_side;
-        int btn_w = sidebar_width;
-        int btn_h = senior ? 48 : 40;
-        int btn_gap = senior ? 16 : 12;
-
-        int start_btn_y = origin_y + (grid_px - (7 * btn_h + 6 * btn_gap)) / 2;
-        if (start_btn_y < header_height + min_header_margin) start_btn_y = header_height + min_header_margin;
-
-        mutable_ui->btn_undo  = {sidebar_x, start_btn_y, sidebar_x + btn_w, start_btn_y + btn_h};
-        mutable_ui->btn_erase = {sidebar_x, start_btn_y + (btn_h + btn_gap), sidebar_x + btn_w, start_btn_y + (btn_h + btn_gap) + btn_h};
-        mutable_ui->btn_notes = {sidebar_x, start_btn_y + (btn_h + btn_gap) * 2, sidebar_x + btn_w, start_btn_y + (btn_h + btn_gap) * 2 + btn_h};
-        mutable_ui->btn_reset = {sidebar_x, start_btn_y + (btn_h + btn_gap) * 3, sidebar_x + btn_w, start_btn_y + (btn_h + btn_gap) * 3 + btn_h};
-        mutable_ui->btn_theme = {sidebar_x, start_btn_y + (btn_h + btn_gap) * 4, sidebar_x + btn_w, start_btn_y + (btn_h + btn_gap) * 4 + btn_h};
-        mutable_ui->btn_lang  = {sidebar_x, start_btn_y + (btn_h + btn_gap) * 5, sidebar_x + btn_w, start_btn_y + (btn_h + btn_gap) * 5 + btn_h};
-        mutable_ui->btn_menu  = {sidebar_x, start_btn_y + (btn_h + btn_gap) * 6, sidebar_x + btn_w, start_btn_y + (btn_h + btn_gap) * 6 + btn_h};
-
+        RECT brandRect = {24, 8, width - 24, 38};
+        DrawTextW_Centered(memDC, brandRect, is_fa ? L"سودوکو سامورایی" : L"SAMURAI SUDOKU", head_txt, buttonFont);
+        const std::wstring en[] = {L"Easy", L"Medium", L"Hard", L"Expert", L"Master"};
+        const std::wstring fa[] = {L"آسان", L"متوسط", L"سخت", L"حرفه‌ای", L"استاد"};
+        const int difficulty = (std::max)(0, (std::min)(4, static_cast<int>(game.difficulty)));
+        wchar_t timer[40];
+        swprintf(timer, 40, L"%02d:%02d", game.elapsed_seconds / 60, game.elapsed_seconds % 60);
+        std::wstring status = (is_fa ? fa[difficulty] : en[difficulty]) + L"   ·   " + timer + L"   ·   ";
+        if (game.manual_check && !game.check_revealed)
+            status += is_fa ? L"بررسی نشده" : L"Not checked";
+        else if (game.is_completed())
+            status += is_fa ? L"پازل کامل شد!" : L"Puzzle complete!";
+        else
+            status += (is_fa ? L"خطاها: " : L"Errors: ") + std::to_wstring(game.error_count);
+        RECT statusRect = {24, 40, width - 24, 70};
+        DrawTextW_Centered(memDC, statusRect, status, head_txt, infoFont);
+        const int cell_sz = ui.cell_size;
+        const int origin_x = ui.grid_origin_x;
+        const int origin_y = ui.grid_origin_y;
         COLORREF action_bg = senior ? RGB(224, 231, 255) : RGB(235, 240, 248);
         COLORREF active_notes_bg = RGB(254, 240, 138);
 
@@ -371,16 +349,20 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         DrawButtonW(memDC, ui.btn_reset, is_fa ? L"ریست بازی" : L"Reset Game", action_bg, RGB(15, 23, 42), buttonFont);
         DrawButtonW(memDC, ui.btn_theme, is_fa ? (senior ? L"پوسته پرکنتراست" : L"پوسته مدرن") : (senior ? L"High Contrast" : L"Modern Theme"), action_bg, RGB(15, 23, 42), buttonFont);
         DrawButtonW(memDC, ui.btn_lang, is_fa ? L"زبان: فارسی" : L"Lang: English", action_bg, RGB(15, 23, 42), buttonFont);
-        DrawButtonW(memDC, ui.btn_menu, is_fa ? L"منوی اصلی (ESC)" : L"Main Menu (ESC)", action_bg, RGB(15, 23, 42), buttonFont);
+        DrawButtonW(memDC, ui.btn_menu, is_fa ? L"منوی بازی (ESC)" : L"Pause (ESC)", action_bg, RGB(15, 23, 42), buttonFont);
 
+        DrawButtonW(memDC, ui.btn_check, is_fa ? L"بررسی (C)" : L"Check (C)", RGB(15, 118, 110), RGB(255, 255, 255), buttonFont);
+        DrawButtonW(memDC, ui.btn_check_mode,
+            is_fa ? (game.manual_check ? L"بررسی: دستی" : L"بررسی: خودکار") : (game.manual_check ? L"Check: manual" : L"Check: automatic"),
+            action_bg, RGB(15, 23, 42), buttonFont);
         int selected_val = 0;
         if (ui.selected_r >= 0 && ui.selected_c >= 0) {
             selected_val = game.board[ui.selected_r][ui.selected_c].value;
         }
 
-        HFONT cellNumFont = CreateFontA(cell_sz * (senior ? 70 : 55) / 100, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+        HFONT cellNumFont = CreateFontA(-(std::max)(10, cell_sz * (senior ? 70 : 62) / 100), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
-        HFONT noteFont = CreateFontA(cell_sz * 26 / 100, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+        HFONT noteFont = CreateFontA(-(std::max)(6, cell_sz * 26 / 100), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                                      OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
 
         COLORREF c_cell_bg = senior ? SENIOR_CELL_BG : MODERN_CELL_BG;
@@ -465,7 +447,7 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         }
 
         // Draw Subgrid Thick Borders
-        HPEN thickPen = CreatePen(PS_SOLID, senior ? 4 : 3, RGB(15, 23, 42));
+        HPEN thickPen = CreatePen(PS_SOLID, cell_sz < 22 ? 2 : (senior ? 4 : 3), RGB(15, 23, 42));
         HPEN oldPen = (HPEN)SelectObject(memDC, thickPen);
 
         for (int g = 0; g < 5; ++g) {
@@ -497,6 +479,7 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
             int pop_w = cell_sz * 4;
             if (pop_w < 130) pop_w = 130;
             if (pop_w > 180) pop_w = 180;
+            pop_w -= pop_w % 3;
             int header_h = 32;
             int pop_h = pop_w + header_h;
 
@@ -509,7 +492,7 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
             if (pop_y < 10) pop_y = 10;
 
             RECT pRect = {pop_x, pop_y, pop_x + pop_w, pop_y + pop_h};
-            mutable_ui->popup_rect = pRect;
+            ui.popup_rect = pRect;
 
             // Keypad Shadow & Solid White Background
             HBRUSH popBg = CreateSolidBrush(RGB(255, 255, 255));
@@ -548,15 +531,13 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
 
         // ESC Menu Overlay
         if (ui.show_esc_menu) {
-            RECT menuRect = {width / 2 - 200, height / 2 - 180, width / 2 + 200, height / 2 + 180};
+            FillRect(memDC, &fullScreenRect, (HBRUSH)GetStockObject(LTGRAY_BRUSH));
+            RECT menuRect = {width / 2 - 240, height / 2 - 180, width / 2 + 240, height / 2 + 180};
             HBRUSH menuBg = CreateSolidBrush(RGB(255, 255, 255));
             FillRect(memDC, &menuRect, menuBg);
             DeleteObject(menuBg);
-
-            FrameRect(memDC, &menuRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
-
-            RECT r_mtitle = {width / 2 - 180, height / 2 - 160, width / 2 + 180, height / 2 - 110};
-            DrawTextW_Centered(memDC, r_mtitle, is_fa ? L"منوی بازی" : L"GAME MENU", RGB(15, 23, 42), titleFont);
+            RECT r_mtitle = {menuRect.left + 16, menuRect.top + 16, menuRect.right - 16, menuRect.top + 64};
+            DrawTextW_Centered(memDC, r_mtitle, is_fa ? L"بازی متوقف است" : L"Game paused", RGB(15, 23, 42), titleFont);
 
             std::vector<std::wstring> mitems;
             if (is_fa) {
@@ -573,16 +554,16 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
                     L"[2] Restart Current Game",
                     L"[3] New Game",
                     L"[4] Toggle Contrast/Modern Theme",
-                    L"[5 / ESC] Main Menu"
+                    L"[5] Main Menu"
                 };
             }
 
             for (size_t i = 0; i < mitems.size(); ++i) {
-                RECT r_item = {width / 2 - 170, height / 2 - 90 + (int)i * 45, width / 2 + 170, height / 2 - 50 + (int)i * 45};
-                DrawTextW_Centered(memDC, r_item, mitems[i], RGB(15, 23, 42), buttonFont);
+                DrawButtonW(memDC, ui.pause_buttons[i], mitems[i], RGB(235, 240, 248), RGB(15, 23, 42), buttonFont);
             }
         }
 
+        SelectObject(memDC, GetStockObject(SYSTEM_FONT));
         DeleteObject(cellNumFont);
         DeleteObject(noteFont);
     }
@@ -601,6 +582,7 @@ void UIRenderer::Render(HDC hdc, int width, int height, const SamuraiSudoku& gam
         DrawTextW_Centered(memDC, loadRect, load_msg, RGB(15, 23, 42), buttonFont);
     }
 
+    SelectObject(memDC, GetStockObject(SYSTEM_FONT));
     DeleteObject(titleFont);
     DeleteObject(buttonFont);
     DeleteObject(infoFont);

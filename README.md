@@ -5,9 +5,10 @@ An offline desktop implementation of Samurai Sudoku in C++ using the Win32 API a
 ## Features
 
 - Procedurally generated puzzles with a unique-solution check
-- Easy, medium and hard difficulty settings
+- Five difficulty settings: easy, medium, hard, expert and master
 - Keyboard and mouse input, pencil notes and undo
-- Borderless fullscreen and windowed play
+- Resizable window with adaptive side or bottom tools
+- Manual checking by default, with an optional automatic feedback mode
 - Automatic save and resume through save.json
 - English and Persian interface support
 
@@ -35,8 +36,15 @@ Use make clean to remove generated build files. Source is under src/ and engine 
 | Erase a value | Delete or Backspace |
 | Toggle notes | N or Shift + digit |
 | Undo | Ctrl + Z |
+| Check answers | C or the Check button |
 | Open game menu | Esc |
 
 Select an empty cell with the mouse; click again or right-click to open the number and notes selector.
 
 Detailed implementation notes are in [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md). Save data is written beside the executable, so that directory must be writable.
+
+Manual checking hides error colors and counts until you press **Check**. Editing a number, erasing or undoing clears the previous result; press Check again to review your latest answers. **Check: manual / automatic** switches modes, and this preference is saved. Existing saves remain readable. A zero-error check on an unfinished board only means the entered values are correct.
+
+The board and tools adapt down to a 560 × 600 client area. On narrow windows the tools form three rows below the board; wider windows use a sidebar. The pause menu supports both mouse and keyboard and blocks board input.
+
+On Windows, `make test-ui` runs layout containment and input-handler tests. `test_layout.exe --snapshots` additionally renders review images in `.qa-preview/` from a copy of the current board in `save.json`; it does not modify that save.

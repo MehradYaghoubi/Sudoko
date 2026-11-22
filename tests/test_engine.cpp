@@ -94,7 +94,42 @@ void test_serialization() {
     std::cout << "[Test] JSON serialization with senior mode passed!" << std::endl;
 }
 
+void test_manual_check() {
+    SamuraiSudoku game;
+    game.board[0][0].solution = 1;
+    assert(game.manual_check);
+    assert(!game.set_cell_value(0, 0, 10));
+    assert(game.set_cell_value(0, 0, 2));
+    assert(!game.board[0][0].is_error && game.error_count == 0);
+    game.recheck_errors(true);
+    assert(game.board[0][0].is_error && game.error_count == 1);
+    assert(game.set_cell_value(0, 0, 1));
+    assert(!game.check_revealed && !game.board[0][0].is_error);
+    assert(game.undo());
+    assert(!game.check_revealed && game.error_count == 0);
+    game.recheck_errors(true);
+    assert(game.error_count == 1);
+    bool senior = false;
+    SamuraiSudoku loaded;
+    assert(loaded.deserialize_from_json(game.serialize_to_json(), senior));
+    assert(loaded.manual_check && !loaded.check_revealed && loaded.error_count == 0);
+    game.manual_check = false;
+    game.recheck_errors();
+    assert(game.error_count == 1);
+    assert(loaded.deserialize_from_json(game.serialize_to_json(), senior));
+    assert(!loaded.manual_check && loaded.error_count == 1);
+    assert(game.clear_cell(0, 0));
+    assert(game.error_count == 0);
+    std::string legacy = loaded.serialize_to_json();
+    const size_t start = legacy.find("  \"manual_check\"");
+    legacy.erase(start, legacy.find('\n', start) - start + 1);
+    assert(loaded.deserialize_from_json(legacy, senior));
+    assert(loaded.manual_check && loaded.error_count == 0);
+    std::cout << "[Test] Manual/automatic checks and save compatibility passed!" << std::endl;
+}
+
 int main() {
+    test_manual_check();
     test_grid_structure();
     test_5_difficulties_generator();
     test_reset_and_anti_pattern();

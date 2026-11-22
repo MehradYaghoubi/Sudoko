@@ -60,6 +60,8 @@ public:
     Language language = Language::English;
     int elapsed_seconds = 0;
     int error_count = 0;
+    bool manual_check = true;
+    bool check_revealed = false;
     std::vector<MoveHistory> history;
 
     SamuraiSudoku();
@@ -84,7 +86,7 @@ public:
     bool undo();
 
     // Verification
-    void recheck_errors();
+    void recheck_errors(bool reveal = false);
 
     // JSON Serialization
     std::string serialize_to_json(bool senior_mode = false) const;

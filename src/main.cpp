@@ -47,6 +47,7 @@ void StartNewGameThread(HWND hwnd, Difficulty diff) {
     std::thread([hwnd, diff]() {
         SamuraiSudoku new_game;
         new_game.language = g_game.language;
+        new_game.manual_check = g_game.manual_check;
         new_game.generate_puzzle(diff);
 
         g_game = new_game;
@@ -73,7 +74,7 @@ static bool HasSavedPuzzle() {
 }
 
 static bool IsInRect(int x, int y, RECT r) {
-    return (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+    return (x >= r.left && x < r.right && y >= r.top && y < r.bottom);
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -97,7 +98,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_TIMER:
         if (wParam == TIMER_ID) {
-            if (g_ui.screen == AppScreen::InGame && !g_ui.is_loading && !g_ui.show_esc_menu && !g_game.is_completed()) {
+            if (g_ui.screen == AppScreen::InGame && !g_ui.is_loading && !g_ui.show_esc_menu && ((g_game.manual_check && !g_game.check_revealed) || !g_game.is_completed())) {
                 g_game.elapsed_seconds++;
                 InvalidateRect(hwnd, NULL, FALSE);
             }
@@ -108,6 +109,20 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         InvalidateRect(hwnd, NULL, FALSE);
         break;
 
+    case WM_GETMINMAXINFO: {
+        auto limits = reinterpret_cast<MINMAXINFO*>(lParam);
+        RECT minimum = {0, 0, 560, 600};
+        AdjustWindowRectEx(&minimum, WS_OVERLAPPEDWINDOW, FALSE, 0);
+        limits->ptMinTrackSize = {minimum.right - minimum.left, minimum.bottom - minimum.top};
+        return 0;
+    }
+    case WM_SIZE: {
+        RECT rect;
+        GetClientRect(hwnd, &rect);
+        UIRenderer::UpdateLayout(rect.right, rect.bottom, g_ui);
+        InvalidateRect(hwnd, NULL, FALSE);
+        break;
+    }
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
@@ -132,22 +147,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int width = clientRect.right - clientRect.left;
         int height = clientRect.bottom - clientRect.top;
 
+        UIRenderer::UpdateLayout(width, height, g_ui);
+
         // ------------------------------------
         // Handle Clicks in MAIN MENU
         // ------------------------------------
         if (g_ui.screen == AppScreen::MainMenu) {
-            bool senior = g_ui.senior_mode;
-            int btn_w = senior ? 360 : 300;
-            int btn_h = senior ? 55 : 46;
-            int start_y = height / 4 + 20;
-            int gap = senior ? 18 : 14;
+            const RECT& r1 = g_ui.menu_buttons[0];
+            const RECT& r2 = g_ui.menu_buttons[1];
+            const RECT& r3 = g_ui.menu_buttons[2];
+            const RECT& r4 = g_ui.menu_buttons[3];
+            const RECT& r5 = g_ui.menu_buttons[4];
+            const RECT& r6 = g_ui.menu_buttons[5];
 
-            RECT r1 = {width / 2 - btn_w / 2, start_y, width / 2 + btn_w / 2, start_y + btn_h};
-            RECT r2 = {width / 2 - btn_w / 2, start_y + (btn_h + gap), width / 2 + btn_w / 2, start_y + (btn_h + gap) + btn_h};
-            RECT r3 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 2, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 2 + btn_h};
-            RECT r4 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 3, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 3 + btn_h};
-            RECT r5 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 4, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 4 + btn_h};
-            RECT r6 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 5, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 5 + btn_h};
 
             if (IsInRect(x, y, r1)) {
                 g_ui.screen = HasSavedPuzzle() ? AppScreen::InGame : AppScreen::DifficultySelect;
@@ -173,18 +185,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         // Handle Clicks in DIFFICULTY SELECT
         // ------------------------------------
         if (g_ui.screen == AppScreen::DifficultySelect) {
-            bool senior = g_ui.senior_mode;
-            int btn_w = senior ? 360 : 300;
-            int btn_h = senior ? 52 : 44;
-            int start_y = height / 3 - 20;
-            int gap = senior ? 16 : 12;
+            const RECT& r1 = g_ui.menu_buttons[0];
+            const RECT& r2 = g_ui.menu_buttons[1];
+            const RECT& r3 = g_ui.menu_buttons[2];
+            const RECT& r4 = g_ui.menu_buttons[3];
+            const RECT& r5 = g_ui.menu_buttons[4];
+            const RECT& r6 = g_ui.menu_buttons[5];
 
-            RECT r1 = {width / 2 - btn_w / 2, start_y, width / 2 + btn_w / 2, start_y + btn_h};
-            RECT r2 = {width / 2 - btn_w / 2, start_y + (btn_h + gap), width / 2 + btn_w / 2, start_y + (btn_h + gap) + btn_h};
-            RECT r3 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 2, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 2 + btn_h};
-            RECT r4 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 3, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 3 + btn_h};
-            RECT r5 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 4, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 4 + btn_h};
-            RECT r6 = {width / 2 - btn_w / 2, start_y + (btn_h + gap) * 5, width / 2 + btn_w / 2, start_y + (btn_h + gap) * 5 + btn_h};
 
             if (IsInRect(x, y, r1)) StartNewGameThread(hwnd, Difficulty::Easy);
             else if (IsInRect(x, y, r2)) StartNewGameThread(hwnd, Difficulty::Medium);
@@ -201,10 +208,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         // Handle Clicks in CONTROLS GUIDE
         // ------------------------------------
         if (g_ui.screen == AppScreen::ControlsGuide) {
-            bool senior = g_ui.senior_mode;
-            int y_guide = height / 4;
-            int step = senior ? 36 : 28;
-            RECT r_back = {width / 2 - 150, y_guide + 8 * step + 20, width / 2 + 150, y_guide + 8 * step + 65};
+            RECT r_back = g_ui.menu_buttons[0];
 
             if (IsInRect(x, y, r_back)) {
                 g_ui.screen = AppScreen::MainMenu;
@@ -217,6 +221,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         // Handle Clicks IN-GAME HUD & BOARD
         // ------------------------------------
         if (g_ui.screen == AppScreen::InGame) {
+            if (g_ui.show_esc_menu) {
+                for (int i = 0; i < 5; ++i) {
+                    if (IsInRect(x, y, g_ui.pause_buttons[i])) {
+                        SendMessage(hwnd, WM_KEYDOWN, '1' + i, 0);
+                        break;
+                    }
+                }
+                break;
+            }
             // STRICT TOP Z-ORDER CHECK: Pop-up Keypad Interception
             if (g_ui.show_number_popup) {
                 if (IsInRect(x, y, g_ui.popup_rect)) {
@@ -246,6 +259,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
             }
 
+            if (IsInRect(x, y, g_ui.btn_check)) {
+                g_game.recheck_errors(true);
+                InvalidateRect(hwnd, NULL, FALSE);
+                break;
+            }
+            if (IsInRect(x, y, g_ui.btn_check_mode)) {
+                g_game.manual_check = !g_game.manual_check;
+                g_game.recheck_errors();
+                SaveGame();
+                InvalidateRect(hwnd, NULL, FALSE);
+                break;
+            }
             // Sidebar Action Buttons
             if (IsInRect(x, y, g_ui.btn_undo)) {
                 g_game.undo();
@@ -312,7 +337,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_RBUTTONDOWN: {
-        if (g_ui.is_loading || g_ui.screen != AppScreen::InGame) break;
+        if (g_ui.is_loading || g_ui.show_esc_menu || g_ui.screen != AppScreen::InGame) break;
         int x = LOWORD(lParam);
         int y = HIWORD(lParam);
         int click_r, click_c;
@@ -387,6 +412,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 } else {
                     g_ui.show_esc_menu = true;
                 }
+                InvalidateRect(hwnd, NULL, FALSE);
+                break;
+            }
+
+            if (wParam == 'C') {
+                g_game.recheck_errors(true);
                 InvalidateRect(hwnd, NULL, FALSE);
                 break;
             }
